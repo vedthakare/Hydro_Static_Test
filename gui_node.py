@@ -142,8 +142,8 @@ if __name__ == '__main__':
     
     # Define the topics you want to subscribe to
     topics = [
-        "remote_sensor_data",
-        "remote_sensor_data_2",
+        "local_sensor_data",
+        "local_sensor_data_2",
         # Add more topics here as needed
     ]
     
