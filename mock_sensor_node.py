@@ -8,7 +8,7 @@ pub = rospy.Publisher('local_sensor_data', Int32, queue_size=10)
 rate = rospy.Rate(10)  # 10Hz
 
 while not rospy.is_shutdown():
-    # Choose one test pattern:
+    # Choose one test pattsern:
     
     # 1. Random values (0-1023)
     value = random.randint(0, 1023)

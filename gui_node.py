@@ -13,7 +13,6 @@ class RosSubscriberThread(QtCore.QThread):
         self.topic_name = topic_name
 
     def run(self):
-        rospy.init_node('gui_node', anonymous=True)
         rospy.Subscriber(self.topic_name, Int32, self.ros_callback)
         rospy.spin()
 
@@ -108,6 +107,7 @@ def set_modern_style(app):
     app.setStyleSheet(qss)
 
 if __name__ == '__main__':
+    rospy.init_node('gui_node', anonymous=True)
     app = QtWidgets.QApplication(sys.argv)
     set_modern_style(app)
     window = MainWindow()
