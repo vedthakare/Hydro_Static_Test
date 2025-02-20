@@ -7,33 +7,36 @@ from PyQt5 import QtWidgets, QtCore, QtGui
 import pyqtgraph as pg
 
 class RosSubscriberThread(QtCore.QThread):
-    data_received = QtCore.pyqtSignal(float)
+    data_received = QtCore.pyqtSignal(str, float)  # topic_name, value
 
-    def __init__(self, topic_name="remote_sensor_data", parent=None):
+    def __init__(self, topic_names=None, parent=None):
         super().__init__(parent)
-        self.topic_name = topic_name
+        self.topic_names = topic_names or ["remote_sensor_data"]
 
     def run(self):
-        rospy.Subscriber(self.topic_name, Int32, self.ros_callback)
+        for topic in self.topic_names:
+            rospy.Subscriber(topic, Int32, lambda msg, topic=topic: self.ros_callback(topic, msg))
         rospy.spin()
 
-    def ros_callback(self, msg):
-        self.data_received.emit(float(msg.data))
+    def ros_callback(self, topic_name, msg):
+        self.data_received.emit(topic_name, float(msg.data))
 
 class MainWindow(QtWidgets.QMainWindow):
-    def __init__(self):
+    def __init__(self, topic_names=None):
         super().__init__()
+        self.topic_names = topic_names or ["remote_sensor_data"]
         self.setWindowTitle("Sensor Data Display")
         self.resize(800, 600)
-        self.data = []
-        self.plot_data = []
+        
+        # Dictionary to store data for each topic
+        self.data_streams = {topic: [] for topic in self.topic_names}
         self.setup_ui()
         
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.update_plot)
         self.timer.start(50)
         
-        self.ros_thread = RosSubscriberThread()
+        self.ros_thread = RosSubscriberThread(self.topic_names)
         self.ros_thread.data_received.connect(self.handle_new_data)
         self.ros_thread.start()
 
@@ -45,21 +48,46 @@ class MainWindow(QtWidgets.QMainWindow):
         # Real-time plot
         self.plot_widget = pg.PlotWidget(title="Sensor Data")
         self.plot_widget.setBackground("#2d2d2d")
+        self.plot_widget.addLegend()
         main_layout.addWidget(self.plot_widget)
-        self.plot_curve = self.plot_widget.plot(pen=pg.mkPen(color=(42, 130, 218), width=2))
+        
+        # Generate distinct colors for each topic
+        colors = self.generate_colors(len(self.topic_names))
+        
+        # Create plot curves and status labels for each topic
+        self.plot_curves = {}
+        self.status_labels = {}
+        
+        status_layout = QtWidgets.QGridLayout()
+        for idx, topic in enumerate(self.topic_names):
+            # Create plot curve
+            self.plot_curves[topic] = self.plot_widget.plot(
+                pen=pg.mkPen(color=colors[idx], width=2),
+                name=f"Sensor {idx + 1} ({topic})"
+            )
+            
+            # Create status label
+            self.status_labels[topic] = QtWidgets.QLabel(f"{topic}: Waiting for data...")
+            status_layout.addWidget(self.status_labels[topic], idx // 2, idx % 2)
 
-        # Status label
-        self.status_label = QtWidgets.QLabel("Waiting for data...")
-        self.status_label.setAlignment(QtCore.Qt.AlignCenter)
-        main_layout.addWidget(self.status_label)
+        main_layout.addLayout(status_layout)
 
-    def handle_new_data(self, value):
-        self.data.append(value)
-        self.plot_data.append(value)
-        self.status_label.setText(f"Latest Value: {value:.2f}")
+    def generate_colors(self, n):
+        # Generate visually distinct colors
+        colors = []
+        for i in range(n):
+            hue = (i * 137.508) % 360  # Use golden angle to generate distinct hues
+            color = QtGui.QColor.fromHsv(int(hue), 200, 255)
+            colors.append(color.getRgb()[:3])
+        return colors
+
+    def handle_new_data(self, topic, value):
+        self.data_streams[topic].append(value)
+        self.status_labels[topic].setText(f"{topic}: {value:.2f}")
 
     def update_plot(self):
-        self.plot_curve.setData(self.plot_data[-1000:])  # Show last 1000 points
+        for topic, curve in self.plot_curves.items():
+            curve.setData(self.data_streams[topic][-1000:])  # Show last 1000 points
 
     def closeEvent(self, event):
         self.ros_thread.quit()
@@ -111,7 +139,15 @@ if __name__ == '__main__':
     rospy.init_node('gui_node', anonymous=True)
     app = QtWidgets.QApplication(sys.argv)
     set_modern_style(app)
-    window = MainWindow()
+    
+    # Define the topics you want to subscribe to
+    topics = [
+        "remote_sensor_data",
+        "remote_sensor_data_2",
+        # Add more topics here as needed
+    ]
+    
+    window = MainWindow(topics)
     window.show()
     sys.exit(app.exec())
 
