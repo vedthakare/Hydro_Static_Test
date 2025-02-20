@@ -6,5 +6,5 @@ def log_data(msg):
         f.write(f"{msg.data}\n")
 
 rospy.init_node('black_box_node')
-rospy.Subscriber('sensor_data', Int32, log_data)
+rospy.Subscriber('remote_sensor_data', Int32, log_data)
 rospy.spin();
