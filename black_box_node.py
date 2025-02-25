@@ -33,8 +33,8 @@ def main():
     
     # Add subscribers - easily extendable for more topics
     topics = [
-        ('voltage_sensor_data', Float32),
-        ('voltage_sensor_data_2', Float32)
+        ('voltage_pressure_data', Float32),
+        ('voltage_pressure_data_2', Float32)
         # Add more topics here as needed: ('topic_name', msg_type)
     ]
     
