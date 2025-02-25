@@ -13,14 +13,6 @@ void setup() {
 }
 
 void loop() {
-    // Check for start signal
-    if (Serial2.available() > 0) {
-        String command = Serial2.readStringUntil('\n');
-        if (command == "START") {
-            startStreaming = true;
-            Serial2.println("READY");
-        }
-    }
 
     // Only stream data if start signal received
     if (startStreaming) {

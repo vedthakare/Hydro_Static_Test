@@ -15,10 +15,6 @@ def read_serial():
         try:
             if ser.in_waiting > 0:
                 line = ser.readline().decode('utf-8').strip()
-                # Check for ready confirmation
-                if line == "READY":
-                    rospy.loginfo("ESP32 is ready")
-                    continue
                     
                 values = line.split(',')
                 if len(values) == 2:
