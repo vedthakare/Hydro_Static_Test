@@ -5,34 +5,29 @@ const int sensorPin2 = 27;    // Second analog sensor pin
 #define RXD2 16              // GPIO16 for RX2
 #define TXD2 17              // GPIO17 for TX2
 
-bool startStreaming = false;
-
 void setup() {
-    // Initialize serial communication using Serial2 (UART2)
+    Serial.begin(115200);
     Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2);
+    delay(100); // Allow time for serial connection stabilization
 }
 
 void loop() {
-    // Check for start signal
-    if (Serial2.available() > 0) {
-        String command = Serial2.readStringUntil('\n');
-        if (command == "START") {
-            startStreaming = true;
-            Serial2.println("READY");
-        }
-    }
+    // Read raw sensor values
+    int raw1 = analogRead(sensorPin1);
+    int raw2 = analogRead(sensorPin2);
 
-    // Only stream data if start signal received
-    if (startStreaming) {
-        // Convert raw ADC values to voltage (ESP32 has 12-bit ADC, 3.3V reference)
-        float voltage1 = (analogRead(sensorPin1) * 3.3) / 4095.0;
-        float voltage2 = (analogRead(sensorPin2) * 3.3) / 4095.0;
-        
-        // Send both voltage values separated by a comma
-        Serial2.print(voltage1, 4);  // 4 decimal places precision
-        Serial2.print(",");
-        Serial2.println(voltage2, 4);
-        
-        delay(5); // Adjust delay as needed
-    }
+    // Convert raw ADC values to voltage (ESP32: 12-bit ADC, 3.3V reference)
+    float voltage1 = (raw1 * 3.3) / 4095.0;
+    float voltage2 = (raw2 * 3.3) / 4095.0;
+
+    // Print data to Serial (for debugging)
+    Serial.printf("Raw1: %d, Raw2: %d | Voltage1: %.4f, Voltage2: %.4f\n", 
+                  raw1, raw2, voltage1, voltage2);
+
+    // Send voltage values over Serial2
+    Serial2.print(voltage1, 4);
+    Serial2.print(",");
+    Serial2.println(voltage2, 4);
+
+    delay(5); // Adjust as needed
 }
