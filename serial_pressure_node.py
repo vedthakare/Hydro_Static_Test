@@ -4,7 +4,7 @@ import serial
 from std_msgs.msg import Float32
 import time
 
-ser = serial.Serial('/dev/ttyUSB0', 115200)
+ser = serial.Serial('/dev/ttyS0', 115200)
 rospy.init_node('serial_node')
 pub = rospy.Publisher('voltage_pressure_data', Float32, queue_size=10)
 pub2 = rospy.Publisher('voltage_pressure_data_2', Float32, queue_size=10)
