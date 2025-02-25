@@ -10,15 +10,24 @@ pub = rospy.Publisher('local_sensor_data', Int32, queue_size=10)
 pub2 = rospy.Publisher('local_sensor_data_2', Int32, queue_size=10)
 
 def read_serial():
+    # Send start signal
+    time.sleep(2)  # Wait for ESP32 to be ready
+    ser.write(b'START\n')
+    rospy.loginfo("Sent START signal to ESP32")
+
     while not rospy.is_shutdown():
         try:
             if ser.in_waiting > 0:
                 line = ser.readline().decode('utf-8').strip()
-                values = line.split(',')  # Split the string at comma
-                if len(values) == 2:  # Make sure we got both values
+                # Check for ready confirmation
+                if line == "READY":
+                    rospy.loginfo("ESP32 is ready")
+                    continue
+                    
+                values = line.split(',')
+                if len(values) == 2:
                     sensor1_value = int(values[0])
                     sensor2_value = int(values[1])
-                    # Now you can use sensor1_value and sensor2_value
                     pub.publish(sensor1_value)
                     pub2.publish(sensor2_value)
         except UnicodeDecodeError:
