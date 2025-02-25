@@ -17,7 +17,7 @@ void loop() {
     // Only stream data if start signal received
     if (startStreaming) {
         // Convert raw ADC values to voltage (ESP32 has 12-bit ADC, 3.3V reference)
-        float voltage1 = (analogRead(sensorPin1) * 5) / 4095.0;
+        float voltage1 = (analogRead(sensorPin1) * 5) / 4095.0; // outs the 5V equivalent
         float voltage2 = (analogRead(sensorPin2) * 5) / 4095.0;
         
         // Send both voltage values separated by a comma
