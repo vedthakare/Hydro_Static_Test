@@ -24,13 +24,14 @@ void loop() {
 
     // Only stream data if start signal received
     if (startStreaming) {
-        int sensorValue1 = analogRead(sensorPin1);
-        int sensorValue2 = analogRead(sensorPin2);
+        // Convert raw ADC values to voltage (ESP32 has 12-bit ADC, 3.3V reference)
+        float voltage1 = (analogRead(sensorPin1) * 3.3) / 4095.0;
+        float voltage2 = (analogRead(sensorPin2) * 3.3) / 4095.0;
         
-        // Send both values separated by a comma
-        Serial2.print(sensorValue1);
+        // Send both voltage values separated by a comma
+        Serial2.print(voltage1, 4);  // 4 decimal places precision
         Serial2.print(",");
-        Serial2.println(sensorValue2);
+        Serial2.println(voltage2, 4);
         
         delay(100); // Adjust delay as needed
     }
