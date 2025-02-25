@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import rospy
-from std_msgs.msg import Int32
+from std_msgs.msg import Float32
 from datetime import datetime
 import csv
 import os
@@ -33,8 +33,8 @@ def main():
     
     # Add subscribers - easily extendable for more topics
     topics = [
-        ('local_sensor_data', Int32),
-        ('local_sensor_data_2', Int32)
+        ('local_sensor_data', Float32),
+        ('local_sensor_data_2', Float32)
         # Add more topics here as needed: ('topic_name', msg_type)
     ]
     
