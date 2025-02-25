@@ -17,8 +17,8 @@ void loop() {
     int raw2 = analogRead(sensorPin2);
 
     // Convert raw ADC values to voltage (ESP32: 12-bit ADC, 3.3V reference)
-    float voltage1 = (raw1 * 3.3) / 4095.0;
-    float voltage2 = (raw2 * 3.3) / 4095.0;
+    float voltage1 = (raw1 * 5) / 4095.0;
+    float voltage2 = (raw2 * 5) / 4095.0;
 
     // Print data to Serial (for debugging)
     Serial.printf("Raw1: %d, Raw2: %d | Voltage1: %.4f, Voltage2: %.4f\n", 
