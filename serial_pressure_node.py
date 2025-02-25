@@ -10,11 +10,7 @@ pub = rospy.Publisher('voltage_pressure_data', Float32, queue_size=10)
 pub2 = rospy.Publisher('voltage_pressure_data_2', Float32, queue_size=10)
 
 def read_serial():
-    # Send start signal
-    time.sleep(2)  # Wait for ESP32 to be ready
-    ser.write(b'START\n')
-    rospy.loginfo("Sent START signal to ESP32")
-
+    
     while not rospy.is_shutdown():
         try:
             if ser.in_waiting > 0:
