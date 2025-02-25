@@ -33,6 +33,6 @@ void loop() {
         Serial2.print(",");
         Serial2.println(voltage2, 4);
         
-        delay(100); // Adjust delay as needed
+        delay(5); // Adjust delay as needed
     }
 }
