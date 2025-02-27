@@ -1,3 +1,4 @@
+#include <Arduino.h>
 #include <WiFi.h>
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
@@ -21,6 +22,7 @@ bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t 
 
 void setup() {
     Serial.begin(115200);
+    Serial2.begin(115200);
     
     // Turn off WiFi to avoid conflicts with ADC2
     WiFi.disconnect();
@@ -65,27 +67,12 @@ void setup() {
 }
 
 void loop() {
-    // Take multiple readings and average them for more stability
-    const int num_samples = 10;
-    int raw1_sum = 0;
-    int raw2_sum = 0;
+    int raw1 = 0;
+    int raw2 = 0;
     
-    for (int i = 0; i < num_samples; i++) {
-        int raw1 = 0;
-        int raw2 = 0;
-        
-        // Read ADC values with oneshot API
-        ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC1_GPIO_CHANNEL, &raw1));
-        ESP_ERROR_CHECK(adc_oneshot_read(adc2_handle, ADC2_GPIO_CHANNEL, &raw2));
-        
-        raw1_sum += raw1;
-        raw2_sum += raw2;
-        delay(5); // Small delay between samples
-    }
-    
-    // Average the readings
-    int raw1 = raw1_sum / num_samples;
-    int raw2 = raw2_sum / num_samples;
+    // Read ADC values with oneshot API
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC1_GPIO_CHANNEL, &raw1));
+    ESP_ERROR_CHECK(adc_oneshot_read(adc2_handle, ADC2_GPIO_CHANNEL, &raw2));
     
     int voltage1_mv = 0;
     int voltage2_mv = 0;
@@ -107,7 +94,12 @@ void loop() {
     Serial.printf("ADC1 (GPIO34) Raw: %d, Voltage: %.6f V\n", raw1, voltage1);
     Serial.printf("ADC2 (GPIO27) Raw: %d, Voltage: %.6f V (corrected)\n", raw2, voltage2);
     
-    delay(1000);
+    // Send voltage values over Serial2
+    Serial2.print(voltage1, 4);
+    Serial2.print(",");
+    Serial2.println(voltage2, 4);
+    
+    delay(5);
 }
 
 // Helper function to initialize ADC calibration
