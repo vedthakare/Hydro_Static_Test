@@ -5,8 +5,8 @@ import random
 import math
 
 rospy.init_node('mock_sensor')
-pub = rospy.Publisher('local_sensor_data', Float32, queue_size=10)
-pub2 = rospy.Publisher('local_sensor_data_2', Float32, queue_size=10)
+pub = rospy.Publisher('voltage_pressure_data', Float32, queue_size=10)
+pub2 = rospy.Publisher('voltage_pressure_data_2', Float32, queue_size=10)
 rate = rospy.Rate(10)  # 10Hz
 
 while not rospy.is_shutdown():
