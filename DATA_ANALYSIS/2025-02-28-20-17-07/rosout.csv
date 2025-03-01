@@ -1,0 +1,4 @@
+Time,header.seq,header.stamp.secs,header.stamp.nsecs,header.frame_id,level,name,msg,file,function,line,topics
+1740791827.6784182,2,1740791827,672718788,,2,/record_1740791827640366999,Recording to '2025-02-28-20-17-07.bag'.,/tmp/binarydeb/ros-noetic-rosbag-1.17.0/src/recorder.cpp,Recorder::startWriting,450,['/rosout']
+1740791827.6785889,3,1740791827,672891375,,2,/record_1740791827640366999,Subscribing to /voltage_pressure_data,/tmp/binarydeb/ros-noetic-rosbag-1.17.0/src/recorder.cpp,shared_ptr<ros::Subscriber> rosbag::Recorder::subscribe,256,['/rosout']
+1740791827.6786215,4,1740791827,676365551,,2,/record_1740791827640366999,Subscribing to /voltage_pressure_data_2,/tmp/binarydeb/ros-noetic-rosbag-1.17.0/src/recorder.cpp,shared_ptr<ros::Subscriber> rosbag::Recorder::subscribe,256,['/rosout']

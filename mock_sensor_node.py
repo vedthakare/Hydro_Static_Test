@@ -24,4 +24,4 @@ while not rospy.is_shutdown():
     
     pub.publish(value)
     pub2.publish(value2)
-    rate.sleep() 
+    rate.sleep()
