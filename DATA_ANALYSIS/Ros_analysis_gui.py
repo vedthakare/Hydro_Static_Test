@@ -9,11 +9,335 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QSlider, QGroupBox, QFileDialog, QListWidget, QSplitter,
                             QMessageBox, QColorDialog, QListWidgetItem, QTabWidget)
 from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QColor, QIcon, QPixmap
+from PyQt5.QtGui import QColor, QIcon, QPixmap, QImage
 from bagpy import bagreader
 from scipy.signal import butter, sosfiltfilt
 import random
 import os
+import cv2
+import rosbag
+from PIL import Image
+import struct
+
+class ImageDisplayWidget(QWidget):
+    """Widget to display camera frames from ROS bag files"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.layout = QVBoxLayout(self)
+        
+        # Create a label to display the image
+        self.image_label = QLabel()
+        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setText("No image loaded")
+        self.layout.addWidget(self.image_label)
+        
+        # Create controls for navigating frames
+        controls_layout = QHBoxLayout()
+        
+        self.prev_btn = QPushButton("Previous Frame")
+        self.prev_btn.clicked.connect(self.prev_frame)
+        controls_layout.addWidget(self.prev_btn)
+        
+        self.frame_slider = QSlider(Qt.Horizontal)
+        self.frame_slider.setEnabled(False)
+        self.frame_slider.valueChanged.connect(self.slider_changed)
+        controls_layout.addWidget(self.frame_slider)
+        
+        self.frame_label = QLabel("Frame: 0/0")
+        controls_layout.addWidget(self.frame_label)
+        
+        self.next_btn = QPushButton("Next Frame")
+        self.next_btn.clicked.connect(self.next_frame)
+        controls_layout.addWidget(self.next_btn)
+        
+        self.layout.addLayout(controls_layout)
+        
+        # Add a checkbox to limit frames
+        limit_layout = QHBoxLayout()
+        self.limit_frames_cb = QCheckBox("Limit to 100 frames (faster loading)")
+        self.limit_frames_cb.setChecked(True)
+        limit_layout.addWidget(self.limit_frames_cb)
+        self.layout.addLayout(limit_layout)
+        
+        # Initialize variables
+        self.frames = []
+        self.current_frame = 0
+        self.bag_file = None
+        self.topic = None
+        self.total_frames = 0
+        self.frame_timestamps = []
+        self.preloaded_frames = {}  # Cache for preloaded frames
+        self.preload_buffer_size = 10  # Number of frames to keep in memory
+        
+    def load_frames(self, bag_file, topic):
+        """Load frames from the specified topic in the bag file"""
+        try:
+            self.statusBar().showMessage(f"Loading frames from {topic}...")
+        except:
+            print(f"Loading frames from {topic}...")
+            
+        try:
+            # Clear existing frames
+            self.frames = []
+            self.preloaded_frames = {}
+            self.frame_timestamps = []
+            self.current_frame = 0
+            
+            # Store bag file and topic for later use
+            self.bag_file = bag_file
+            self.topic = topic
+            
+            # Count total frames and store timestamps
+            bag = rosbag.Bag(bag_file)
+            frame_count = 0
+            
+            for _, msg, t in bag.read_messages(topics=[topic]):
+                self.frame_timestamps.append((frame_count, t.to_sec(), msg))
+                frame_count += 1
+                
+                # If limiting frames, stop after 100
+                if self.limit_frames_cb.isChecked() and frame_count >= 100:
+                    break
+                    
+                # Update progress every 100 frames
+                if frame_count % 100 == 0:
+                    try:
+                        self.statusBar().showMessage(f"Counting frames: {frame_count} found so far...")
+                        QApplication.processEvents()
+                    except:
+                        print(f"Counting frames: {frame_count} found so far...")
+            
+            bag.close()
+            
+            self.total_frames = frame_count
+            
+            if self.total_frames == 0:
+                print("No frames found in the topic")
+                self.frames = [self._create_dummy_frame(f"No frames found in {topic}", 0)]
+                self.current_frame = 0
+                self.update_display()
+                return False
+                
+            print(f"Found {self.total_frames} frames in topic {topic}")
+            
+            # Set up slider
+            self.frame_slider.setEnabled(True)
+            self.frame_slider.setMinimum(0)
+            self.frame_slider.setMaximum(self.total_frames - 1)
+            self.frame_slider.setValue(0)
+            
+            # Preload first frame
+            self._load_frame(0)
+            self.update_display()
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error loading frames: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
+            # Create dummy frames to show error
+            self.frames = [self._create_dummy_frame(f"Error: {str(e)}", 0)]
+            if self.frames:
+                self.current_frame = 0
+                self.update_display()
+            
+            return False
+    
+    def _load_frame(self, index):
+        """Load a specific frame by index"""
+        if index < 0 or index >= self.total_frames:
+            return False
+            
+        # Check if frame is already preloaded
+        if index in self.preloaded_frames:
+            return True
+            
+        try:
+            # Get the message from stored timestamps
+            _, _, msg = self.frame_timestamps[index]
+            
+            # Convert message to image
+            pixmap = self._convert_msg_to_pixmap(msg)
+            if pixmap:
+                self.preloaded_frames[index] = pixmap
+                
+                # Remove old frames from cache if it gets too large
+                if len(self.preloaded_frames) > self.preload_buffer_size:
+                    # Keep current frame and neighbors, remove the oldest ones
+                    keep_indices = list(range(max(0, index - 5), min(self.total_frames, index + 6)))
+                    keys_to_remove = [k for k in self.preloaded_frames.keys() 
+                                     if k not in keep_indices and k != index]
+                    
+                    # Sort by distance from current index and remove furthest
+                    keys_to_remove.sort(key=lambda k: abs(k - index), reverse=True)
+                    
+                    # Remove excess frames
+                    excess = len(self.preloaded_frames) - self.preload_buffer_size
+                    for k in keys_to_remove[:excess]:
+                        del self.preloaded_frames[k]
+                
+                return True
+        except Exception as e:
+            print(f"Error loading frame {index}: {str(e)}")
+            
+        return False
+    
+    def _convert_msg_to_pixmap(self, msg):
+        """Convert a ROS image message to QPixmap"""
+        try:
+            # Try different methods to convert the message to an image
+            cv_image = None
+            
+            if hasattr(msg, 'format') and msg.format == 'rgb8':
+                img_data = np.frombuffer(msg.data, dtype=np.uint8)
+                cv_image = img_data.reshape((msg.height, msg.width, 3))
+            elif hasattr(msg, 'format') and msg.format == 'bgr8':
+                img_data = np.frombuffer(msg.data, dtype=np.uint8)
+                cv_image = img_data.reshape((msg.height, msg.width, 3))
+                cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            elif hasattr(msg, 'encoding'):
+                if msg.encoding == 'rgb8':
+                    img_data = np.frombuffer(msg.data, dtype=np.uint8)
+                    cv_image = img_data.reshape((msg.height, msg.width, 3))
+                elif msg.encoding == 'bgr8':
+                    img_data = np.frombuffer(msg.data, dtype=np.uint8)
+                    cv_image = img_data.reshape((msg.height, msg.width, 3))
+                    cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+                elif msg.encoding == 'mono8':
+                    img_data = np.frombuffer(msg.data, dtype=np.uint8)
+                    cv_image = img_data.reshape((msg.height, msg.width))
+                    cv_image = cv2.cvtColor(cv_image, cv2.COLOR_GRAY2RGB)
+                else:
+                    # Try a generic approach
+                    img_data = np.frombuffer(msg.data, dtype=np.uint8)
+                    if msg.step == msg.width:  # Mono
+                        cv_image = img_data.reshape((msg.height, msg.width))
+                        cv_image = cv2.cvtColor(cv_image, cv2.COLOR_GRAY2RGB)
+                    else:  # Assume 3 channels
+                        channels = msg.step // msg.width
+                        cv_image = img_data.reshape((msg.height, msg.width, channels))
+                        if channels == 3:
+                            # Assume BGR and convert to RGB
+                            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            else:
+                # Try compressed image formats
+                if hasattr(msg, 'format') and msg.format.lower() == 'jpeg':
+                    np_arr = np.frombuffer(msg.data, np.uint8)
+                    cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                    cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+                elif hasattr(msg, 'format') and msg.format.lower() == 'png':
+                    np_arr = np.frombuffer(msg.data, np.uint8)
+                    cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                    cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+                else:
+                    # Last resort - try to interpret as raw data
+                    if hasattr(msg, 'width') and hasattr(msg, 'height'):
+                        width = msg.width
+                        height = msg.height
+                        # Guess channels based on data length
+                        data_len = len(msg.data)
+                        if data_len == width * height:  # Mono
+                            channels = 1
+                        elif data_len == width * height * 3:  # RGB/BGR
+                            channels = 3
+                        else:
+                            raise ValueError(f"Can't determine image format from data length {data_len}")
+                        
+                        img_data = np.frombuffer(msg.data, dtype=np.uint8)
+                        if channels == 1:
+                            cv_image = img_data.reshape((height, width))
+                            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_GRAY2RGB)
+                        else:
+                            cv_image = img_data.reshape((height, width, channels))
+                            # Assume BGR and convert to RGB
+                            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+                    else:
+                        raise ValueError("Message doesn't have width/height attributes")
+            
+            if cv_image is None:
+                raise ValueError("Failed to convert message to image")
+                
+            # Convert to QPixmap
+            if len(cv_image.shape) == 2:  # Grayscale
+                height, width = cv_image.shape
+                bytes_per_line = width
+                q_image = QImage(cv_image.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
+            else:  # RGB
+                height, width, channels = cv_image.shape
+                bytes_per_line = channels * width
+                q_image = QImage(cv_image.data, width, height, bytes_per_line, QImage.Format_RGB888)
+            
+            return QPixmap.fromImage(q_image)
+            
+        except Exception as e:
+            print(f"Error converting message to pixmap: {str(e)}")
+            return None
+    
+    def _create_dummy_frame(self, text, index):
+        """Create a dummy frame with text for testing"""
+        # Create a blank image
+        image = QPixmap(640, 480)
+        image.fill(QColor(40, 40, 40))
+        
+        # Add text
+        from PyQt5.QtGui import QPainter, QFont, QPen
+        painter = QPainter(image)
+        painter.setPen(QPen(QColor(255, 255, 255)))
+        font = QFont()
+        font.setPointSize(20)
+        painter.setFont(font)
+        painter.drawText(image.rect(), Qt.AlignCenter, f"{text}\nFrame {index+1}")
+        painter.end()
+        
+        return image
+    
+    def update_display(self):
+        """Update the display with the current frame"""
+        if self.total_frames == 0:
+            self.image_label.setText("No frames loaded")
+            self.frame_label.setText("Frame: 0/0")
+            return
+            
+        # Make sure current frame is loaded
+        self._load_frame(self.current_frame)
+        
+        # Also preload next and previous frames
+        if self.current_frame > 0:
+            self._load_frame(self.current_frame - 1)
+        if self.current_frame < self.total_frames - 1:
+            self._load_frame(self.current_frame + 1)
+            
+        # Display current frame
+        if self.current_frame in self.preloaded_frames:
+            self.image_label.setPixmap(self.preloaded_frames[self.current_frame])
+            self.frame_label.setText(f"Frame: {self.current_frame+1}/{self.total_frames}")
+            
+            # Update slider without triggering valueChanged
+            self.frame_slider.blockSignals(True)
+            self.frame_slider.setValue(self.current_frame)
+            self.frame_slider.blockSignals(False)
+        else:
+            self.image_label.setText(f"Error loading frame {self.current_frame+1}")
+        
+    def next_frame(self):
+        """Show the next frame"""
+        if self.total_frames > 0 and self.current_frame < self.total_frames - 1:
+            self.current_frame += 1
+            self.update_display()
+            
+    def prev_frame(self):
+        """Show the previous frame"""
+        if self.total_frames > 0 and self.current_frame > 0:
+            self.current_frame -= 1
+            self.update_display()
+            
+    def slider_changed(self, value):
+        """Handle slider value change"""
+        if self.total_frames > 0 and 0 <= value < self.total_frames:
+            self.current_frame = value
+            self.update_display()
 
 class ColorBox(QWidget):
     """Small colored box widget to display a topic's color"""
@@ -92,6 +416,11 @@ class BagVisualizer(QMainWindow):
         # Add tab for video preview
         self.video_tab = QWidget()
         self.tab_widget.addTab(self.video_tab, "Video Preview")
+        
+        # Set up video tab
+        video_tab_layout = QVBoxLayout(self.video_tab)
+        self.image_display = ImageDisplayWidget()
+        video_tab_layout.addWidget(self.image_display)
         
         # Set up plot tab
         plot_tab_layout = QVBoxLayout(self.plot_tab)
@@ -540,6 +869,7 @@ class BagVisualizer(QMainWindow):
         
         topic = self.camera_combo.currentText()
         if not topic:
+            QMessageBox.warning(self, "Warning", "No camera topics available")
             return
         
         self.statusBar().showMessage(f"Loading frames from topic: {topic}")
@@ -547,16 +877,40 @@ class BagVisualizer(QMainWindow):
         # Show video tab
         self.tab_widget.setCurrentIndex(1)
         
-        # Load frames in the image display widget
-        success = self.image_display.load_frames(self.bag_file, topic)
+        # Show a progress dialog
+        progress_msg = QMessageBox()
+        progress_msg.setIcon(QMessageBox.Information)
+        progress_msg.setText("Loading camera frames...")
+        progress_msg.setInformativeText(f"Loading frames from {topic}")
+        progress_msg.setWindowTitle("Loading Frames")
+        progress_msg.setStandardButtons(QMessageBox.NoButton)
+        progress_msg.show()
+        QApplication.processEvents()  # Force UI update
         
-        if success:
-            self.statusBar().showMessage(f"Loaded frames from {topic}")
-        else:
-            self.statusBar().showMessage(f"Failed to load frames from {topic}")
+        try:
+            # Load frames in the image display widget
+            success = self.image_display.load_frames(self.bag_file, topic)
+            
+            # Close progress dialog
+            progress_msg.close()
+            
+            if success:
+                self.statusBar().showMessage(f"Loaded frames from {topic}")
+            else:
+                self.statusBar().showMessage(f"Failed to load frames from {topic}")
+                QMessageBox.warning(self, "Warning", f"Failed to load frames from {topic}")
+        except Exception as e:
+            # Close progress dialog
+            progress_msg.close()
+            
+            self.statusBar().showMessage(f"Error loading frames: {str(e)}")
+            QMessageBox.warning(self, "Warning", f"Failed to load frames: {str(e)}")
+            import traceback
+            print(f"Error details:")
+            print(traceback.format_exc())
     
     def convert_to_video(self):
-        """Convert selected camera topic to video file using va.rosbag_to_video"""
+        """Convert selected camera topic to video file"""
         if not self.bag_file:
             QMessageBox.warning(self, "Warning", "Please load a bag file first")
             return
@@ -566,11 +920,11 @@ class BagVisualizer(QMainWindow):
             QMessageBox.warning(self, "Warning", "Please select a camera topic")
             return
             
-        # Check if the topic contains 'usb_cam'
-        if 'usb_cam' not in topic:
+        # Check if the topic contains camera-related keywords
+        if 'usb_cam' not in topic and 'image' not in topic and 'camera' not in topic:
             QMessageBox.warning(self, "Warning", 
-                               f"The selected topic '{topic}' may not be compatible with rosbag_to_video. "
-                               "It's recommended to use USB camera topics.")
+                            f"The selected topic '{topic}' may not be compatible with video conversion. "
+                            "It's recommended to use camera topics.")
             reply = QMessageBox.question(self, "Continue?", 
                                         "Do you want to try conversion anyway?",
                                         QMessageBox.Yes | QMessageBox.No)
@@ -586,10 +940,41 @@ class BagVisualizer(QMainWindow):
             
         # Show processing message
         self.statusBar().showMessage(f"Converting {topic} to video file...")
+        QApplication.processEvents()  # Force UI update
         
         try:
-            # Call the Video_analysis.rosbag_to_video function
-            va.rosbag_to_video(self.bag_file, topic, output_path)
+            # Verify that the bag file exists
+            if not os.path.exists(self.bag_file):
+                QMessageBox.critical(self, "Error", f"Bag file not found: {self.bag_file}")
+                return
+                
+            # Show a progress dialog
+            progress_msg = QMessageBox()
+            progress_msg.setIcon(QMessageBox.Information)
+            progress_msg.setText("Converting video...")
+            progress_msg.setInformativeText(f"Converting {topic} from {self.bag_file} to {output_path}")
+            progress_msg.setWindowTitle("Video Conversion")
+            progress_msg.setStandardButtons(QMessageBox.NoButton)
+            progress_msg.show()
+            QApplication.processEvents()  # Force UI update
+            
+            # Call standalone function instead of class method
+            from tqdm import tqdm
+            self.rosbag_to_video(self.bag_file, topic, output_path)
+            
+            # Close progress dialog
+            progress_msg.close()
+            
+            # Check if the output file was created
+            if not os.path.exists(output_path):
+                QMessageBox.warning(self, "Warning", 
+                                f"Conversion completed but the output file was not found at {output_path}")
+                return
+                
+            # Check file size to ensure it's not empty
+            if os.path.getsize(output_path) < 1000:  # Less than 1KB is suspicious
+                QMessageBox.warning(self, "Warning", 
+                                f"The output file was created but may be empty or corrupted ({os.path.getsize(output_path)} bytes)")
             
             self.statusBar().showMessage(f"Video saved to {output_path}")
             
@@ -600,16 +985,148 @@ class BagVisualizer(QMainWindow):
             
             if reply == QMessageBox.Yes:
                 # Try to open the video file with the default system application
-                if sys.platform.startswith('darwin'):  # macOS
-                    os.system(f'open "{output_path}"')
-                elif sys.platform.startswith('win'):   # Windows
-                    os.system(f'start "" "{output_path}"')
-                else:  # Linux
-                    os.system(f'xdg-open "{output_path}"')
+                try:
+                    if sys.platform.startswith('darwin'):  # macOS
+                        os.system(f'open "{output_path}"')
+                    elif sys.platform.startswith('win'):   # Windows
+                        os.system(f'start "" "{output_path}"')
+                    else:  # Linux
+                        os.system(f'xdg-open "{output_path}"')
+                except Exception as e:
+                    QMessageBox.warning(self, "Warning", 
+                                    f"Could not open the video file: {str(e)}")
                     
         except Exception as e:
             self.statusBar().showMessage(f"Error converting video: {str(e)}")
             QMessageBox.critical(self, "Error", f"Failed to convert video: {str(e)}")
+            # Print detailed error information
+            import traceback
+            print(f"Error details:")
+            print(traceback.format_exc())
+
+    def rosbag_to_video(self, bag_file, topic, output_video_file):
+        """
+        Convert ROS bag camera topic to video file without external dependencies
+        Based on the working reference code
+        """
+        try:
+            bag = rosbag.Bag(bag_file, 'r')
+            
+            images = []
+            timestamps = []
+            message_count = 0
+            
+            # First pass to count messages for progress estimation
+            for _ in bag.read_messages(topics=[topic]):
+                message_count += 1
+                
+            # Reset the bag
+            bag.close()
+            bag = rosbag.Bag(bag_file, 'r')
+            
+            # Process frames
+            processed = 0
+            for topic_name, msg, t in bag.read_messages(topics=[topic]):
+                try:
+                    # Update progress every 10 frames
+                    if processed % 10 == 0:
+                        progress_percent = int(100 * processed / max(1, message_count))
+                        self.statusBar().showMessage(f"Processing frames: {processed}/{message_count} ({progress_percent}%)")
+                        QApplication.processEvents()  # Keep UI responsive
+                    
+                    # For compressed image topics
+                    if 'compressed' in topic_name:
+                        # Directly decode the compressed image data
+                        image = cv2.imdecode(np.frombuffer(msg.data, dtype=np.uint8), cv2.IMREAD_COLOR)
+                    else:
+                        # For raw image topics
+                        if hasattr(msg, 'encoding'):
+                            encoding = msg.encoding
+                        elif hasattr(msg, 'format'):
+                            encoding = msg.format
+                        else:
+                            encoding = 'rgb8'  # Default assumption
+                            
+                        # Handle compound format strings
+                        if ';' in encoding:
+                            encoding_parts = encoding.split(';')
+                            if any('compressed' in part for part in encoding_parts):
+                                image = cv2.imdecode(np.frombuffer(msg.data, dtype=np.uint8), cv2.IMREAD_COLOR)
+                            else:
+                                encoding = encoding_parts[0].strip()
+                                
+                        # Handle non-compressed formats
+                        if 'compressed' not in topic_name and ('jpeg' not in encoding.lower() and 'png' not in encoding.lower()):
+                            height = msg.height
+                            width = msg.width
+                            
+                            # Handle different color encodings
+                            if encoding == 'mono8':
+                                image = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, width))
+                                image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+                            elif encoding == 'rgb8':
+                                image = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, width, 3))
+                                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                            elif encoding == 'bgr8':
+                                image = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, width, 3))
+                            else:
+                                # Try to guess based on step
+                                step = getattr(msg, 'step', width * 3)
+                                channels = step // width if width > 0 else 3
+                                image = np.frombuffer(msg.data, dtype=np.uint8).reshape((height, width, channels))
+                                if channels == 3 and encoding.startswith('rgb'):
+                                    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+                    if image is None:
+                        print("Failed to decode an image, skipping...")
+                        continue
+
+                    images.append(image)
+                    timestamps.append(t.to_sec())  # Convert ROS time to seconds
+                    processed += 1
+                    
+                except Exception as e:
+                    print(f"Skipping message due to error: {e}")
+                    continue
+
+            bag.close()
+
+            if len(images) < 2:
+                raise ValueError("Not enough frames to create a video (less than 2 frames processed).")
+                
+            # Compute frame rates based on time differences
+            time_diffs = np.diff(timestamps)  # Compute time gaps between frames
+            avg_fps = 1.0 / np.mean(time_diffs)  # Compute the average frame rate
+            print(f"Computed FPS: {avg_fps:.2f}")
+            
+            # Use a reasonable default if the computed FPS is too extreme
+            if avg_fps < 1 or avg_fps > 100:
+                avg_fps = 30
+                print(f"FPS value was extreme, defaulting to {avg_fps}")
+
+            # Get resolution from the first image
+            height, width = images[0].shape[:2]
+            fourcc = cv2.VideoWriter_fourcc(*'XVID')
+            out = cv2.VideoWriter(output_video_file, fourcc, avg_fps, (width, height))
+            
+            # Write video frames
+            for i, img in enumerate(images):
+                # Update progress
+                if i % 10 == 0:
+                    progress_percent = int(100 * i / len(images))
+                    self.statusBar().showMessage(f"Writing video: {i}/{len(images)} frames ({progress_percent}%)")
+                    QApplication.processEvents()
+                    
+                out.write(img)
+
+            out.release()
+            print(f"Video saved to {output_video_file}")
+            self.statusBar().showMessage(f"Video saved to {output_video_file} with {len(images)} frames at {avg_fps:.2f} FPS")
+            
+            return True
+            
+        except Exception as e:
+            raise Exception(f"Error in video conversion: {str(e)}")
 
 
 if __name__ == "__main__":
