@@ -7,12 +7,13 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QComboBox, QCheckBox, QLabel, QPushButton, 
                             QSlider, QGroupBox, QFileDialog, QListWidget, QSplitter,
-                            QMessageBox, QColorDialog, QListWidgetItem)
+                            QMessageBox, QColorDialog, QListWidgetItem, QTabWidget)
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QColor, QIcon, QPixmap
 from bagpy import bagreader
 from scipy.signal import butter, sosfiltfilt
 import random
+import os
 
 class ColorBox(QWidget):
     """Small colored box widget to display a topic's color"""
@@ -58,6 +59,7 @@ class BagVisualizer(QMainWindow):
         self.cutoff = 0.1
         self.filter_order = 2
         self.topic_colors = {}  # Store colors for topics
+        self.camera_topics = []  # Store camera topics
         
         # Create main widget and layout
         main_widget = QWidget()
@@ -80,8 +82,22 @@ class BagVisualizer(QMainWindow):
         # Add control panel to main layout
         main_layout.addWidget(control_panel)
         
-        # Create splitter for resizable panels
-        splitter = QSplitter(Qt.Horizontal)
+        # Create tab widget for plot and video views
+        self.tab_widget = QTabWidget()
+        
+        # Add tab for plot view
+        self.plot_tab = QWidget()
+        self.tab_widget.addTab(self.plot_tab, "Plot View")
+        
+        # Add tab for video preview
+        self.video_tab = QWidget()
+        self.tab_widget.addTab(self.video_tab, "Video Preview")
+        
+        # Set up plot tab
+        plot_tab_layout = QVBoxLayout(self.plot_tab)
+        
+        # Create splitter for resizable panels in plot tab
+        plot_splitter = QSplitter(Qt.Horizontal)
         
         # Left panel for controls
         left_panel = QWidget()
@@ -178,6 +194,25 @@ class BagVisualizer(QMainWindow):
         self.refresh_btn.clicked.connect(self.update_plot)
         left_layout.addWidget(self.refresh_btn)
         
+        # Add camera topic selection
+        camera_group = QGroupBox("Camera Preview")
+        camera_layout = QVBoxLayout(camera_group)
+        
+        camera_layout.addWidget(QLabel("Available Camera Topics:"))
+        self.camera_combo = QComboBox()
+        camera_layout.addWidget(self.camera_combo)
+        
+        self.load_video_btn = QPushButton("Load Camera Frames")
+        self.load_video_btn.clicked.connect(self.load_camera_frames)
+        camera_layout.addWidget(self.load_video_btn)
+        
+        # Add new button for rosbag_to_video conversion
+        self.convert_video_btn = QPushButton("Convert to Video File")
+        self.convert_video_btn.clicked.connect(self.convert_to_video)
+        camera_layout.addWidget(self.convert_video_btn)
+        
+        left_layout.addWidget(camera_group)
+        
         # Add some stretch to push everything up
         left_layout.addStretch()
         
@@ -195,14 +230,17 @@ class BagVisualizer(QMainWindow):
         plot_layout.addWidget(self.canvas)
         
         # Add panels to splitter
-        splitter.addWidget(left_panel)
-        splitter.addWidget(self.plot_widget)
+        plot_splitter.addWidget(left_panel)
+        plot_splitter.addWidget(self.plot_widget)
         
         # Set initial sizes
-        splitter.setSizes([300, 900])
+        plot_splitter.setSizes([300, 900])
         
-        # Add splitter to main layout
-        main_layout.addWidget(splitter)
+        # Add splitter to plot tab layout
+        plot_tab_layout.addWidget(plot_splitter)
+        
+        # Add tab widget to main layout
+        main_layout.addWidget(self.tab_widget)
         
         # Status bar setup
         self.statusBar().showMessage("Ready")
@@ -227,6 +265,8 @@ class BagVisualizer(QMainWindow):
             self.topic_data = {}
             self.selected_topics = []
             self.selected_topics_list.clear()
+            self.camera_topics = []
+            self.camera_combo.clear()
             
             # Get available topics
             topic_table = self.bag_reader.topic_table
@@ -236,8 +276,23 @@ class BagVisualizer(QMainWindow):
             self.topic_combo.clear()
             for topic in self.available_topics:
                 self.topic_combo.addItem(topic)
+                
+                # Identify camera topics
+                if 'usb_cam' in topic or 'image' in topic or 'camera' in topic:
+                    self.camera_topics.append(topic)
+                    self.camera_combo.addItem(topic)
             
             self.statusBar().showMessage("Bag file loaded successfully")
+            
+            # If camera topics were found, switch to video tab and auto-load first camera
+            if self.camera_topics:
+                self.statusBar().showMessage(f"Found {len(self.camera_topics)} camera topics")
+                self.tab_widget.setCurrentIndex(1)  # Switch to video tab
+                # Auto-load the first camera topic
+                if self.camera_combo.count() > 0:
+                    self.camera_combo.setCurrentIndex(0)
+                    self.load_camera_frames()
+            
             self.update_plot()
             
         except Exception as e:
@@ -476,6 +531,85 @@ class BagVisualizer(QMainWindow):
         # Refresh canvas
         self.canvas.draw()
         self.statusBar().showMessage("Plot updated")
+    
+    def load_camera_frames(self):
+        """Load frames for the selected camera topic"""
+        if not self.bag_file:
+            QMessageBox.warning(self, "Warning", "Please load a bag file first")
+            return
+        
+        topic = self.camera_combo.currentText()
+        if not topic:
+            return
+        
+        self.statusBar().showMessage(f"Loading frames from topic: {topic}")
+        
+        # Show video tab
+        self.tab_widget.setCurrentIndex(1)
+        
+        # Load frames in the image display widget
+        success = self.image_display.load_frames(self.bag_file, topic)
+        
+        if success:
+            self.statusBar().showMessage(f"Loaded frames from {topic}")
+        else:
+            self.statusBar().showMessage(f"Failed to load frames from {topic}")
+    
+    def convert_to_video(self):
+        """Convert selected camera topic to video file using va.rosbag_to_video"""
+        if not self.bag_file:
+            QMessageBox.warning(self, "Warning", "Please load a bag file first")
+            return
+            
+        topic = self.camera_combo.currentText()
+        if not topic:
+            QMessageBox.warning(self, "Warning", "Please select a camera topic")
+            return
+            
+        # Check if the topic contains 'usb_cam'
+        if 'usb_cam' not in topic:
+            QMessageBox.warning(self, "Warning", 
+                               f"The selected topic '{topic}' may not be compatible with rosbag_to_video. "
+                               "It's recommended to use USB camera topics.")
+            reply = QMessageBox.question(self, "Continue?", 
+                                        "Do you want to try conversion anyway?",
+                                        QMessageBox.Yes | QMessageBox.No)
+            if reply == QMessageBox.No:
+                return
+        
+        # Get output file path
+        file_dialog = QFileDialog()
+        output_path, _ = file_dialog.getSaveFileName(self, "Save Video File", "", "Video Files (*.avi)")
+        
+        if not output_path:
+            return
+            
+        # Show processing message
+        self.statusBar().showMessage(f"Converting {topic} to video file...")
+        
+        try:
+            # Call the Video_analysis.rosbag_to_video function
+            va.rosbag_to_video(self.bag_file, topic, output_path)
+            
+            self.statusBar().showMessage(f"Video saved to {output_path}")
+            
+            # Ask if user wants to preview the converted video
+            reply = QMessageBox.question(self, "Preview Video", 
+                                        "Video conversion complete. Would you like to preview it?",
+                                        QMessageBox.Yes | QMessageBox.No)
+            
+            if reply == QMessageBox.Yes:
+                # Try to open the video file with the default system application
+                if sys.platform.startswith('darwin'):  # macOS
+                    os.system(f'open "{output_path}"')
+                elif sys.platform.startswith('win'):   # Windows
+                    os.system(f'start "" "{output_path}"')
+                else:  # Linux
+                    os.system(f'xdg-open "{output_path}"')
+                    
+        except Exception as e:
+            self.statusBar().showMessage(f"Error converting video: {str(e)}")
+            QMessageBox.critical(self, "Error", f"Failed to convert video: {str(e)}")
 
 
 if __name__ == "__main__":
