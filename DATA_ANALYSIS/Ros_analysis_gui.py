@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QComboBox, QCheckBox, QLabel, QPushButton, 
                             QSlider, QGroupBox, QFileDialog, QListWidget, QSplitter,
                             QMessageBox, QColorDialog, QListWidgetItem, QTabWidget)
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QColor, QIcon, QPixmap, QImage
 from bagpy import bagreader
 from scipy.signal import butter, sosfiltfilt
@@ -37,6 +37,11 @@ class ImageDisplayWidget(QWidget):
         self.prev_btn = QPushButton("Previous Frame")
         self.prev_btn.clicked.connect(self.prev_frame)
         controls_layout.addWidget(self.prev_btn)
+        
+        # Add play/pause button
+        self.play_btn = QPushButton("Play")
+        self.play_btn.clicked.connect(self.toggle_playback)
+        controls_layout.addWidget(self.play_btn)
         
         self.frame_slider = QSlider(Qt.Horizontal)
         self.frame_slider.setEnabled(False)
@@ -69,6 +74,13 @@ class ImageDisplayWidget(QWidget):
         self.preloaded_frames = {}  # Cache for preloaded frames
         self.preload_buffer_size = 10  # Number of frames to keep in memory
         
+        # Playback variables
+        self.is_playing = False
+        self.playback_speed = 1.0  # Speed multiplier
+        self.playback_timer = None
+        self.playback_timer = QTimer()
+        self.playback_timer.timeout.connect(self.play_next_frame)
+        
     def load_frames(self, bag_file, topic):
         """Load frames from the specified topic in the bag file"""
         try:
@@ -76,74 +88,74 @@ class ImageDisplayWidget(QWidget):
         except:
             print(f"Loading frames from {topic}...")
             
-        try:
-            # Clear existing frames
-            self.frames = []
-            self.preloaded_frames = {}
-            self.frame_timestamps = []
-            self.current_frame = 0
-            
-            # Store bag file and topic for later use
-            self.bag_file = bag_file
-            self.topic = topic
-            
-            # Count total frames and store timestamps
-            bag = rosbag.Bag(bag_file)
-            frame_count = 0
-            
-            for _, msg, t in bag.read_messages(topics=[topic]):
-                self.frame_timestamps.append((frame_count, t.to_sec(), msg))
-                frame_count += 1
+            try:
+                # Clear existing frames
+                self.frames = []
+                self.preloaded_frames = {}
+                self.frame_timestamps = []
+                self.current_frame = 0
                 
-                # If limiting frames, stop after 100
-                if self.limit_frames_cb.isChecked() and frame_count >= 100:
-                    break
+                # Store bag file and topic for later use
+                self.bag_file = bag_file
+                self.topic = topic
+                
+                # Count total frames and store timestamps
+                bag = rosbag.Bag(bag_file)
+                frame_count = 0
+                
+                for _, msg, t in bag.read_messages(topics=[topic]):
+                    self.frame_timestamps.append((frame_count, t.to_sec(), msg))
+                    frame_count += 1
                     
-                # Update progress every 100 frames
-                if frame_count % 100 == 0:
-                    try:
-                        self.statusBar().showMessage(f"Counting frames: {frame_count} found so far...")
-                        QApplication.processEvents()
-                    except:
-                        print(f"Counting frames: {frame_count} found so far...")
-            
-            bag.close()
-            
-            self.total_frames = frame_count
-            
-            if self.total_frames == 0:
-                print("No frames found in the topic")
-                self.frames = [self._create_dummy_frame(f"No frames found in {topic}", 0)]
-                self.current_frame = 0
-                self.update_display()
-                return False
+                    # If limiting frames, stop after 100
+                    if self.limit_frames_cb.isChecked() and frame_count >= 100:
+                        break
+                        
+                    # Update progress every 100 frames
+                    if frame_count % 100 == 0:
+                        try:
+                            self.statusBar().showMessage(f"Counting frames: {frame_count} found so far...")
+                            QApplication.processEvents()
+                        except:
+                            print(f"Counting frames: {frame_count} found so far...")
                 
-            print(f"Found {self.total_frames} frames in topic {topic}")
-            
-            # Set up slider
-            self.frame_slider.setEnabled(True)
-            self.frame_slider.setMinimum(0)
-            self.frame_slider.setMaximum(self.total_frames - 1)
-            self.frame_slider.setValue(0)
-            
-            # Preload first frame
-            self._load_frame(0)
-            self.update_display()
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error loading frames: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            
-            # Create dummy frames to show error
-            self.frames = [self._create_dummy_frame(f"Error: {str(e)}", 0)]
-            if self.frames:
-                self.current_frame = 0
+                bag.close()
+                
+                self.total_frames = frame_count
+                
+                if self.total_frames == 0:
+                    print("No frames found in the topic")
+                    self.frames = [self._create_dummy_frame(f"No frames found in {topic}", 0)]
+                    self.current_frame = 0
+                    self.update_display()
+                    return False
+                    
+                print(f"Found {self.total_frames} frames in topic {topic}")
+                
+                # Set up slider
+                self.frame_slider.setEnabled(True)
+                self.frame_slider.setMinimum(0)
+                self.frame_slider.setMaximum(self.total_frames - 1)
+                self.frame_slider.setValue(0)
+                
+                # Preload first frame
+                self._load_frame(0)
                 self.update_display()
-            
-            return False
+                
+                return True
+                
+            except Exception as e:
+                print(f"Error loading frames: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                
+                # Create dummy frames to show error
+                self.frames = [self._create_dummy_frame(f"Error: {str(e)}", 0)]
+                if self.frames:
+                    self.current_frame = 0
+                    self.update_display()
+                
+                return False
     
     def _load_frame(self, index):
         """Load a specific frame by index"""
@@ -190,7 +202,17 @@ class ImageDisplayWidget(QWidget):
             # Try different methods to convert the message to an image
             cv_image = None
             
-            if hasattr(msg, 'format') and msg.format == 'rgb8':
+            # Handle compressed image formats first
+            if hasattr(msg, 'format') and msg.format.lower() in ['jpeg', 'png']:
+                np_arr = np.frombuffer(msg.data, np.uint8)
+                cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            elif hasattr(msg, '_type') and 'CompressedImage' in msg._type:
+                np_arr = np.frombuffer(msg.data, np.uint8)
+                cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+                cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+            # Then try standard image formats
+            elif hasattr(msg, 'format') and msg.format == 'rgb8':
                 img_data = np.frombuffer(msg.data, dtype=np.uint8)
                 cv_image = img_data.reshape((msg.height, msg.width, 3))
             elif hasattr(msg, 'format') and msg.format == 'bgr8':
@@ -222,39 +244,29 @@ class ImageDisplayWidget(QWidget):
                             # Assume BGR and convert to RGB
                             cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
             else:
-                # Try compressed image formats
-                if hasattr(msg, 'format') and msg.format.lower() == 'jpeg':
-                    np_arr = np.frombuffer(msg.data, np.uint8)
-                    cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-                    cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-                elif hasattr(msg, 'format') and msg.format.lower() == 'png':
-                    np_arr = np.frombuffer(msg.data, np.uint8)
-                    cv_image = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-                    cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
-                else:
-                    # Last resort - try to interpret as raw data
-                    if hasattr(msg, 'width') and hasattr(msg, 'height'):
-                        width = msg.width
-                        height = msg.height
-                        # Guess channels based on data length
-                        data_len = len(msg.data)
-                        if data_len == width * height:  # Mono
-                            channels = 1
-                        elif data_len == width * height * 3:  # RGB/BGR
-                            channels = 3
-                        else:
-                            raise ValueError(f"Can't determine image format from data length {data_len}")
-                        
-                        img_data = np.frombuffer(msg.data, dtype=np.uint8)
-                        if channels == 1:
-                            cv_image = img_data.reshape((height, width))
-                            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_GRAY2RGB)
-                        else:
-                            cv_image = img_data.reshape((height, width, channels))
-                            # Assume BGR and convert to RGB
-                            cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+                # Last resort - try to interpret as raw data
+                if hasattr(msg, 'width') and hasattr(msg, 'height'):
+                    width = msg.width
+                    height = msg.height
+                    # Guess channels based on data length
+                    data_len = len(msg.data)
+                    if data_len == width * height:  # Mono
+                        channels = 1
+                    elif data_len == width * height * 3:  # RGB/BGR
+                        channels = 3
                     else:
-                        raise ValueError("Message doesn't have width/height attributes")
+                        raise ValueError(f"Can't determine image format from data length {data_len}")
+                    
+                    img_data = np.frombuffer(msg.data, dtype=np.uint8)
+                    if channels == 1:
+                        cv_image = img_data.reshape((height, width))
+                        cv_image = cv2.cvtColor(cv_image, cv2.COLOR_GRAY2RGB)
+                    else:
+                        cv_image = img_data.reshape((height, width, channels))
+                        # Assume BGR and convert to RGB
+                        cv_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+                else:
+                    raise ValueError("Message doesn't have width/height attributes")
             
             if cv_image is None:
                 raise ValueError("Failed to convert message to image")
@@ -337,6 +349,56 @@ class ImageDisplayWidget(QWidget):
         """Handle slider value change"""
         if self.total_frames > 0 and 0 <= value < self.total_frames:
             self.current_frame = value
+            self.update_display()
+    
+    def toggle_playback(self):
+        """Toggle between play and pause states"""
+        if self.is_playing:
+            self.pause_playback()
+        else:
+            self.start_playback()
+    
+    def start_playback(self):
+        """Start playing the frames"""
+        if self.total_frames <= 1:
+            return
+            
+        self.is_playing = True
+        self.play_btn.setText("Pause")
+        
+        # Calculate frame interval based on timestamps if available
+        if len(self.frame_timestamps) > 1:
+            # Use the average time between frames
+            intervals = []
+            for i in range(1, min(10, len(self.frame_timestamps))):
+                intervals.append(self.frame_timestamps[i][1] - self.frame_timestamps[i-1][1])
+            
+            if intervals:
+                avg_interval = sum(intervals) / len(intervals)
+                interval_ms = int(avg_interval * 1000 / self.playback_speed)
+                # Ensure reasonable limits (between 10ms and 1000ms)
+                interval_ms = max(10, min(1000, interval_ms))
+            else:
+                interval_ms = 100  # Default 10 FPS
+        else:
+            interval_ms = 100  # Default 10 FPS
+            
+        self.playback_timer.start(interval_ms)
+    
+    def pause_playback(self):
+        """Pause the playback"""
+        self.is_playing = False
+        self.play_btn.setText("Play")
+        self.playback_timer.stop()
+    
+    def play_next_frame(self):
+        """Play the next frame during playback"""
+        if self.current_frame < self.total_frames - 1:
+            self.current_frame += 1
+            self.update_display()
+        else:
+            # Loop back to the beginning
+            self.current_frame = 0
             self.update_display()
 
 class ColorBox(QWidget):
@@ -607,20 +669,15 @@ class BagVisualizer(QMainWindow):
                 self.topic_combo.addItem(topic)
                 
                 # Identify camera topics
-                if 'usb_cam' in topic or 'image' in topic or 'camera' in topic:
+                if 'usb_cam' in topic or 'image' in topic or 'camera' in topic or 'compressed' in topic:
                     self.camera_topics.append(topic)
                     self.camera_combo.addItem(topic)
             
             self.statusBar().showMessage("Bag file loaded successfully")
             
-            # If camera topics were found, switch to video tab and auto-load first camera
+            # If camera topics were found, update the status but don't auto-load
             if self.camera_topics:
                 self.statusBar().showMessage(f"Found {len(self.camera_topics)} camera topics")
-                self.tab_widget.setCurrentIndex(1)  # Switch to video tab
-                # Auto-load the first camera topic
-                if self.camera_combo.count() > 0:
-                    self.camera_combo.setCurrentIndex(0)
-                    self.load_camera_frames()
             
             self.update_plot()
             
