@@ -6,7 +6,7 @@ import RPi.GPIO as GPIO
 from std_msgs.msg import Float32
 
 # GPIO Setup
-ESP32_ENABLE_PIN = 17  # Use the correct GPIO pin
+ESP32_ENABLE_PIN = 18  # Use the correct GPIO pin
 GPIO.setmode(GPIO.BCM)
 GPIO.setup(ESP32_ENABLE_PIN, GPIO.OUT)
 GPIO.output(ESP32_ENABLE_PIN, GPIO.LOW)  # Ensure it's low initially
