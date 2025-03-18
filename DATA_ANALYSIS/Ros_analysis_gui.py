@@ -893,14 +893,14 @@ class BagVisualizer(QMainWindow):
                     
                     # Show raw data if selected
                     if topic_item.show_raw:
-                        ax.plot(norm_time, data, label=f'{topic} - Raw', 
+                        ax.plot(norm_time.values, data.values, label=f'{topic} - Raw', 
                                color=color_rgb, alpha=0.5)
                     
                     # Show filtered data if selected
                     if topic_item.show_filtered:
                         try:
                             filtered_data = self.safe_filter(data, self.cutoff, fs, self.filter_order)
-                            ax.plot(norm_time, filtered_data, label=f'{topic} - Filtered', 
+                            ax.plot(norm_time.values, filtered_data.values, label=f'{topic} - Filtered', 
                                    color=color_rgb)
                         except Exception as e:
                             self.statusBar().showMessage(f"Filter error: {str(e)}")
