@@ -20,6 +20,7 @@ bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t 
 
 void setup() {
     Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2);
+    Serial.begin(115200);
 
     adc_oneshot_unit_init_cfg_t adc1_config = {
         .unit_id = ADC_UNIT_1,
@@ -67,6 +68,9 @@ void loop() {
     Serial2.print(",");
     Serial2.println(voltage2_mv);
 
+    Serial.print(raw1);
+    Serial.print(",");
+    Serial.println(raw2);
     delay(5);
 }
 

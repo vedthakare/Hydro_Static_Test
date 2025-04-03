@@ -12,19 +12,19 @@ def butter_lowpass(cutoff, fs, order=4):
     return b, a
 
 # Apply Butterworth filter to data
-def butter_filter(data, cutoff, fs, order=4):
+def butter_filter(data, cutoff, fs, order=2):
     b, a = butter_lowpass(cutoff, fs, order)
     return filtfilt(b, a, data)
 
 # Read the bag file
-b = bagreader('DATA_ANALYSIS/2025-02-28-20-17-07.bag')
+b = bagreader('/Users/vedthakare/Desktop/rand/2025-03-25-15-49-10.bag')
 
 # Check the available topics in the bag file
 print(b.topic_table)
 
 # Extract messages from topics (replace '/voltage_pressure_data' and '/voltage_pressure_data_2' with actual topic names from your bag file)
-df_topic1 = pd.read_csv(b.message_by_topic('/voltage_pressure_data'))
-df_topic2 = pd.read_csv(b.message_by_topic('/voltage_pressure_data_2'))
+df_topic1 = pd.read_csv(b.message_by_topic('/pressure_data'))
+df_topic2 = pd.read_csv(b.message_by_topic('/pressure_data_2'))
 
 # Check the type and content of df_topic1 and df_topic2
 print(type(df_topic1))
@@ -39,9 +39,9 @@ data_topic2 = df_topic2['data']
 fs = 1 / (time[1] - time[0])  # Calculate sampling frequency (inverse of time difference)
 cutoff = 0.1  # Cutoff frequency for the low-pass filter (adjust this value as needed)
 
-# Apply Butterworth filter to both datasets
-filtered_data_topic1 = butter_filter(data_topic1, cutoff, fs)
-filtered_data_topic2 = butter_filter(data_topic2, cutoff, fs)
+# Apply Butterworth filter to both datasets with a less aggressive filter order
+filtered_data_topic1 = butter_filter(data_topic1, cutoff, fs, order=1)
+filtered_data_topic2 = butter_filter(data_topic2, cutoff, fs, order=1)
 
 # Plotting the original and filtered data
 plt.figure(figsize=(10, 5))
