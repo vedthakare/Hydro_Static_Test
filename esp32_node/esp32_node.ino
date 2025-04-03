@@ -1,4 +1,3 @@
-
 #include <Wire.h>
 #include "HX711.h"
 #include "esp_adc/adc_oneshot.h"
@@ -12,8 +11,8 @@
 // ADC Channel Definitions for Sensors
 #define PT1_GPIO ADC_CHANNEL_6  // GPIO 34 (Pressure Sensor 1)
 #define PT2_GPIO ADC_CHANNEL_7  // GPIO 35 (Pressure Sensor 2)
-#define TC1_GPIO ADC_CHANNEL_2  // GPIO 14 (Thermocouple 1)
-#define TC2_GPIO ADC_CHANNEL_3  // GPIO 27 (Thermocouple 2)
+#define TC1_GPIO ADC_CHANNEL_7  // GPIO 27 (Thermocouple 1)
+#define TC2_GPIO ADC_CHANNEL_6  // GPIO 14 (Thermocouple 2)
 
 // Pin definitions for HX711
 #define DT_PIN 21 // GPIO pin connected to DT (data) of HX711
