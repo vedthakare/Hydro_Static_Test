@@ -1,98 +1,160 @@
-#include <Arduino.h>
-#include <WiFi.h>
+
+#include <Wire.h>
+#include "HX711.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 
+// Serial Communication Pins
 #define RXD2 16
 #define TXD2 17
 
-#define ADC1_6_GPIO_CHANNEL  ADC_CHANNEL_6
-#define ADC1_7_GPIO_CHANNEL  ADC_CHANNEL_7
+// ADC Channel Definitions for Sensors
+#define PT1_GPIO ADC_CHANNEL_6  // GPIO 34 (Pressure Sensor 1)
+#define PT2_GPIO ADC_CHANNEL_7  // GPIO 35 (Pressure Sensor 2)
+#define TC1_GPIO ADC_CHANNEL_2  // GPIO 14 (Thermocouple 1)
+#define TC2_GPIO ADC_CHANNEL_3  // GPIO 27 (Thermocouple 2)
 
-adc_oneshot_unit_handle_t adc1_handle;
-adc_cali_handle_t adc1_cali_handle = NULL;
-adc_cali_handle_t adc1_7_cali_handle = NULL;
+// Pin definitions for HX711
+#define DT_PIN 21 // GPIO pin connected to DT (data) of HX711
+#define SCK_PIN 22 // GPIO pin connected to SCK (clock) of HX711
 
-#define ADC1_7_CORRECTION_FACTOR 1
+float rawValue;
+long loadcell_value;  // Added missing variable declaration
 
+HX711 scale;
+
+// Define a calibration factor for the load cell (adjust based on calibration)
+#define LOADCELL_CALIBRATION_FACTOR 420.0 // Example value, needs to be calibrated
+
+// Create ADC handles
+adc_oneshot_unit_handle_t adc1_handle, adc2_handle;
+adc_cali_handle_t adc1_cali_handle = NULL, adc2_cali_handle = NULL;
+
+// Function to initialize ADC calibration
 bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle);
 
 void setup() {
-    Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2);
     Serial.begin(115200);
+    Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2);
+    
+    // Initialize the scale
+    scale.begin(DT_PIN, SCK_PIN);
+  
+    // Check if the HX711 is connected
+    // if (!scale.is_ready()) {
+    //   Serial.println("Error: HX711 not found.");
+    //   while (true) {
+    //     delay(100);
+    //   }
+    // }
+  
+    Serial.println("Place no weight on the scale.");
+    delay(5000); // Wait for user to remove all weight
+    Serial.println("Calibrating...");
+  
+    // Tare the scale to zero it
+    scale.tare();
+    Serial.println("Scale offset calibrated.");
+    
+    Serial.print("Offset value: ");
+    Serial.println(scale.get_offset());
+  
+    Serial.println("You can now add weight to measure readings.");
+    delay(1000);
 
-    adc_oneshot_unit_init_cfg_t adc1_config = {
-        .unit_id = ADC_UNIT_1,
-        .ulp_mode = ADC_ULP_MODE_DISABLE,
-    };
+    // Correct ADC configuration
+    adc_oneshot_unit_init_cfg_t adc1_config = { .unit_id = ADC_UNIT_1 };
+    adc_oneshot_unit_init_cfg_t adc2_config = { .unit_id = ADC_UNIT_2 };
     ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc1_config, &adc1_handle));
-
-    adc_oneshot_chan_cfg_t chan_config = {
-        .atten = ADC_ATTEN_DB_12,
-        .bitwidth = ADC_BITWIDTH_12,
-    };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC1_6_GPIO_CHANNEL, &chan_config));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC1_7_GPIO_CHANNEL, &chan_config));
-
-    // **Initialize ADC calibration**
-    if (!adc_calibration_init(ADC_UNIT_1, ADC_ATTEN_DB_12, &adc1_cali_handle)) {
-        Serial.println("Calibration failed for ADC1_6");
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&adc2_config, &adc2_handle));
+    
+    adc_oneshot_chan_cfg_t chan_config = { .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_12 };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, PT1_GPIO, &chan_config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, PT2_GPIO, &chan_config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc2_handle, TC1_GPIO, &chan_config));
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc2_handle, TC2_GPIO, &chan_config));
+    
+    // Initialize ADC calibration
+    if (adc_calibration_init(ADC_UNIT_1, ADC_ATTEN_DB_12, &adc1_cali_handle)) {
+        Serial.println("ADC1 calibration success");
+    } else {
+        Serial.println("ADC1 calibration failed");
     }
-    if (!adc_calibration_init(ADC_UNIT_1, ADC_ATTEN_DB_12, &adc1_7_cali_handle)) {
-        Serial.println("Calibration failed for ADC1_7");
+    
+    if (adc_calibration_init(ADC_UNIT_2, ADC_ATTEN_DB_12, &adc2_cali_handle)) {
+        Serial.println("ADC2 calibration success");
+    } else {
+        Serial.println("ADC2 calibration failed");
     }
 }
 
 void loop() {
-    int raw1 = 0, raw2 = 0;
-    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC1_6_GPIO_CHANNEL, &raw1));
-    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, ADC1_7_GPIO_CHANNEL, &raw2));
-
-    int voltage1_mv = 0, voltage2_mv = 0; float voltage1 = 0; float voltage2 = 0;
-
-    if (adc1_cali_handle != NULL) {
-        adc_cali_raw_to_voltage(adc1_cali_handle, raw1, &voltage1_mv);
+    int raw_pt1, raw_pt2, raw_tc1, raw_tc2;
+    int voltage_pt1, voltage_pt2, voltage_tc1, voltage_tc2;
+    float pt1_v, pt2_v, tc1_v, tc2_v;
+    
+    // Read raw ADC values
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, PT1_GPIO, &raw_pt1));
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, PT2_GPIO, &raw_pt2));
+    ESP_ERROR_CHECK(adc_oneshot_read(adc2_handle, TC1_GPIO, &raw_tc1));
+    ESP_ERROR_CHECK(adc_oneshot_read(adc2_handle, TC2_GPIO, &raw_tc2));
+    
+    // Fix the problematic ternary operators with proper if-else statements
+    if (adc1_cali_handle) {
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle, raw_pt1, &voltage_pt1));
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc1_cali_handle, raw_pt2, &voltage_pt2));
     } else {
-        voltage1_mv = raw1;  // Use raw value if calibration fails
+        voltage_pt1 = raw_pt1;
+        voltage_pt2 = raw_pt2;
     }
-
-    if (adc1_7_cali_handle != NULL) {
-        adc_cali_raw_to_voltage(adc1_7_cali_handle, raw2, &voltage2_mv);
-        voltage2_mv *= ADC1_7_CORRECTION_FACTOR;
+    
+    if (adc2_cali_handle) {
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc2_cali_handle, raw_tc1, &voltage_tc1));
+        ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc2_cali_handle, raw_tc2, &voltage_tc2));
     } else {
-        voltage2_mv = raw2;  // Use raw value if calibration fails
+        voltage_tc1 = raw_tc1;
+        voltage_tc2 = raw_tc2;
     }
-
-    Serial2.print(voltage1_mv);
-    Serial2.print(",");
-    Serial2.println(voltage2_mv);
-
-    Serial.print(raw1);
-    Serial.print(",");
-    Serial.println(raw2);
-    delay(5);
+    
+    // Convert to volts
+    pt1_v = voltage_pt1 / 1000.0;
+    pt2_v = voltage_pt2 / 1000.0;
+    tc1_v = voltage_tc1 / 1000.0;
+    tc2_v = voltage_tc2 / 1000.0;
+    
+    // Get load cell reading with proper error handling
+    if (scale.is_ready()) {
+      // Read the raw value from the HX711
+      loadcell_value = scale.get_units();
+    } else {
+      Serial.println("Waiting for HX711...");
+    }
+    
+    Serial.printf("PT1_RAW: %d, PT1_V: %.3f, PT2_RAW: %d, PT2_V: %.3f, TC1_RAW: %d, TC1_V: %.3f, TC2_RAW: %d, TC2_V: %.3f, Loadcell: %ld\n", 
+    raw_pt1, pt1_v, raw_pt2, pt2_v, raw_tc1, tc1_v, raw_tc2, tc2_v, loadcell_value);
+    
+    Serial2.printf("%d,%.3f,%d,%.3f,%d,%.3f,%d,%.3f,%ld\n", raw_pt1, pt1_v, raw_pt2, pt2_v, raw_tc1, tc1_v, raw_tc2, tc2_v, loadcell_value);
+    
+    delay(100); // Changed delay from 5ms to 100ms to reduce serial flooding
 }
 
 bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle) {
     adc_cali_handle_t handle = NULL;
-    esp_err_t ret = ESP_FAIL;
-    bool calibrated = false;
-
-    adc_cali_line_fitting_config_t cali_config = {
-        .unit_id = unit,
-        .atten = atten,
-        .bitwidth = ADC_BITWIDTH_12,
-        .default_vref = 1100,
+    adc_cali_line_fitting_config_t cali_config = { 
+        .unit_id = unit, 
+        .atten = atten, 
+        .bitwidth = ADC_BITWIDTH_12, 
+        .default_vref = 1100 
     };
     
-    ret = adc_cali_create_scheme_line_fitting(&cali_config, &handle);
+    esp_err_t ret = adc_cali_create_scheme_line_fitting(&cali_config, &handle);
     if (ret == ESP_OK) {
-        calibrated = true;
-    } else {
-        Serial.println("Failed to create calibration scheme");
+        *out_handle = handle;
+        Serial.printf("ADC calibration success for unit %d\n", unit);
+        return true;
     }
-
-    *out_handle = handle;
-    return calibrated;
+    
+    Serial.printf("ADC calibration failed for unit %d with error code %d\n", unit, ret);
+    return false;
 }

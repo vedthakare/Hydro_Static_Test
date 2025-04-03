@@ -1,69 +1,51 @@
-#include <Wire.h>
 #include <HX711.h>
 
-// Define Serial2 pins for ESP32
-#define RXD2 16
-#define TXD2 17
+// Pin definitions for HX711
+#define DT_PIN 21 // GPIO pin connected to DT (data) of HX711
+#define SCK_PIN 22 // GPIO pin connected to SCK (clock) of HX711
 
-// HX711 Load Cell Pins
-const int LOADCELL_DOUT_PIN = 21;  // Use GPIO 32 instead of 21 if issues persist
-const int LOADCELL_SCK_PIN = 22;   // Use GPIO 33 instead of 22
+float rawValue;
 
 HX711 scale;
 
 void setup() {
-    Serial.begin(115200);
-    Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2);
+  Serial.begin(115200);
+  Serial.println("HX711 Offset Calibration");
+  
+  // Initialize the scale
+  scale.begin(DT_PIN, SCK_PIN);
 
-    Serial.println("ESP32 Load Cell Reader Initializing...");
-    Serial2.println("ESP32 Load Cell Reader Initializing...");
+  // Check if the HX711 is connected
+ // if (!scale.is_ready()) {
+ //   Serial.println("Error: HX711 not found.");
+ //   while (true) {
+ //     delay(100);
+ //  }
+ // }
 
-    // Initialize HX711
-    scale.begin(LOADCELL_DOUT_PIN, LOADCELL_SCK_PIN);
+  Serial.println("Place no weight on the scale.");
+  delay(5000); // Wait for user to remove all weight
+  Serial.println("Calibrating...");
 
-    Serial.println("Checking HX711 connection...");
-    Serial2.println("Checking HX711 connection...");
+  // Tare the scale to zero it
+  scale.tare();
+  Serial.println("Scale offset calibrated.");
+  
+  Serial.print("Offset value: ");
+  Serial.println(scale.get_offset());
 
-    // Wait for HX711 to be ready
-    if (scale.wait_ready_timeout(5000)) { // Increased timeout for better detection
-        Serial.println("HX711 detected!");
-        Serial2.println("HX711 detected!");
-    } else {
-        Serial.println("ERROR: HX711 not detected! Check wiring.");
-        Serial2.println("ERROR: HX711 not detected! Check wiring.");
-        while (1) {  // Keep looping but allow debugging
-            Serial.println("Recheck HX711 wiring...");
-            delay(2000);
-        }
-    }
-
-    // Apply calibration factor (adjust this for better accuracy)
-    scale.set_scale(2280.f); 
-
-    // Tare the scale to zero
-    Serial.println("Taring scale... Please wait.");
-    scale.tare();
-    Serial.println("Scale zeroed. Ready to measure.");
-    Serial2.println("Scale zeroed. Ready to measure.");
+  Serial.println("You can now add weight to measure readings.");
+  delay(1000);
 }
 
 void loop() {
-    if (scale.is_ready()) {
-        float weight = scale.get_units(5);  // Average of 5 readings for stability
-
-        // Print to Serial Monitor
-        Serial.print("Weight: ");
-        Serial.print(weight, 2);
-        Serial.println(" kg");
-
-        // Print to Serial2
-        Serial2.print("Weight: ");
-        Serial2.print(weight, 2);
-        Serial2.println(" kg");
-    } else {
-        Serial.println("HX711 not responding...");
-        Serial2.println("HX711 not responding...");
-    }
-
-    delay(1000);  // 1-second delay between readings
+  if (scale.is_ready()) {
+    // Read the raw value from the HX711
+    rawValue = scale.get_units();
+    Serial.print("Weight (units): ");
+    Serial.println(rawValue);
+  } else {
+    Serial.println("Waiting for HX711...");
+  }
+  delay(100); // Update every 500 ms
 }
