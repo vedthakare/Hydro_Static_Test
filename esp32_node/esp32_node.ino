@@ -4,10 +4,11 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 
+//Define Pi start pin
+#define Pi_start 18
 // Serial Communication Pins
 #define RXD2 16
 #define TXD2 17
-
 // ADC Channel Definitions for Sensors
 #define PT1_GPIO ADC_CHANNEL_6  // GPIO 34 (Pressure Sensor 1)
 #define PT2_GPIO ADC_CHANNEL_7  // GPIO 35 (Pressure Sensor 2)
@@ -33,9 +34,14 @@ adc_cali_handle_t adc1_cali_handle = NULL, adc2_cali_handle = NULL;
 // Function to initialize ADC calibration
 bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle);
 
+
 void setup() {
+    pinMode(Pi_start, INPUT_PULLDOWN);  // Add this line first
+    
+    
     Serial.begin(115200);
     Serial2.begin(115200, SERIAL_8N1, RXD2, TXD2);
+
     
     // Initialize the scale
     scale.begin(DT_PIN, SCK_PIN);
@@ -48,18 +54,18 @@ void setup() {
     //   }
     // }
   
-    Serial.println("Place no weight on the scale.");
+    //Serial.println("Place no weight on the scale.");
     delay(5000); // Wait for user to remove all weight
-    Serial.println("Calibrating...");
+    //Serial.println("Calibrating...");
   
     // Tare the scale to zero it
     scale.tare();
-    Serial.println("Scale offset calibrated.");
+    //Serial.println("Scale offset calibrated.");
     
-    Serial.print("Offset value: ");
-    Serial.println(scale.get_offset());
+    //Serial.print("Offset value: ");
+    //Serial.println(scale.get_offset());
   
-    Serial.println("You can now add weight to measure readings.");
+    //Serial.println("You can now add weight to measure readings.");
     delay(1000);
 
     // Correct ADC configuration
@@ -76,19 +82,23 @@ void setup() {
     
     // Initialize ADC calibration
     if (adc_calibration_init(ADC_UNIT_1, ADC_ATTEN_DB_12, &adc1_cali_handle)) {
-        Serial.println("ADC1 calibration success");
+        //Serial.println("ADC1 calibration success");
     } else {
-        Serial.println("ADC1 calibration failed");
+        //Serial.println("ADC1 calibration failed");
     }
     
     if (adc_calibration_init(ADC_UNIT_2, ADC_ATTEN_DB_12, &adc2_cali_handle)) {
-        Serial.println("ADC2 calibration success");
+        //Serial.println("ADC2 calibration success");
     } else {
-        Serial.println("ADC2 calibration failed");
+        //Serial.println("ADC2 calibration failed");
     }
 }
 
 void loop() {
+    //Serial.println("23");
+    while(digitalRead(Pi_start) == HIGH){
+
+    
     int raw_pt1, raw_pt2, raw_tc1, raw_tc2;
     int voltage_pt1, voltage_pt2, voltage_tc1, voltage_tc2;
     float pt1_v, pt2_v, tc1_v, tc2_v;
@@ -135,7 +145,8 @@ void loop() {
     
     Serial2.printf("%d,%.3f,%d,%.3f,%d,%.3f,%d,%.3f,%ld\n", raw_pt1, pt1_v, raw_pt2, pt2_v, raw_tc1, tc1_v, raw_tc2, tc2_v, loadcell_value);
     
-    delay(100); // Changed delay from 5ms to 100ms to reduce serial flooding
+    delay(6); // Changed delay from 5ms to 100ms to reduce serial flooding
+    }
 }
 
 bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle) {
@@ -150,10 +161,10 @@ bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t 
     esp_err_t ret = adc_cali_create_scheme_line_fitting(&cali_config, &handle);
     if (ret == ESP_OK) {
         *out_handle = handle;
-        Serial.printf("ADC calibration success for unit %d\n", unit);
+        //Serial.printf("ADC calibration success for unit %d\n", unit);
         return true;
     }
     
-    Serial.printf("ADC calibration failed for unit %d with error code %d\n", unit, ret);
+    //Serial.printf("ADC calibration failed for unit %d with error code %d\n", unit, ret);
     return false;
 }
