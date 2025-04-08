@@ -5,7 +5,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPalette, QColor
 
 import rospy
-from std_msgs.msg import Bool, Int32, String
+from std_msgs.msg import Bool, Float32, String
 
 class ControlGUI(QMainWindow):
     def __init__(self):
@@ -29,7 +29,7 @@ class ControlGUI(QMainWindow):
         rospy.init_node("control_gui_node", anonymous=True)
         self.relay_pub = rospy.Publisher("/relay_states", String, queue_size=10)
         self.estop_pub = rospy.Publisher("/emergency_stop", Bool, queue_size=10)
-        self.servo_pub = rospy.Publisher("/servo_angle", Int32, queue_size=10)
+        self.servo_pub = rospy.Publisher("/servo_angle", Float32, queue_size=10)
 
     def create_ui(self):
         self.create_relay_section()

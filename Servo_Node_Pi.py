@@ -4,11 +4,11 @@ from std_msgs.msg import Float32
 import RPi.GPIO as GPIO
 from time import sleep
 
-SERVO_PIN = 32  # Physical pin 32 = GPIO 12 in BOARD mode
+SERVO_PIN = 12  # Physical pin 32 = GPIO 12 in BOARD mode
 FREQ = 50       # Standard servo PWM frequency in Hz
 
 def setup_gpio():
-    GPIO.setmode(GPIO.BOARD)
+    GPIO.setmode(GPIO.BCM)
     GPIO.setup(SERVO_PIN, GPIO.OUT)
     pwm = GPIO.PWM(SERVO_PIN, FREQ)
     pwm.start(0)  # Start PWM at 0% duty cycle
