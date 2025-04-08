@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import rospy
 import RPi.GPIO as GPIO
+from std_msgs.msg import String  # Import the ROS String message
 
 # Define GPIO pins for each relay (edit if needed)
-RELAY_PINS = [6,13,19,26]
+RELAY_PINS = [6, 13, 19, 26]
 
 def setup_gpio():
     GPIO.setmode(GPIO.BCM)  # Use BCM numbering
@@ -22,13 +23,15 @@ def relay_callback(data):
         for i in range(4):
             GPIO.output(RELAY_PINS[i], GPIO.HIGH if states[i] else GPIO.LOW)
         rospy.loginfo("Relays set to: %s", states)
-    except:
+    except Exception as e:
         rospy.logerr("Invalid input: %s", data.data)
+        rospy.logerr("Exception: %s", str(e))
 
 def main():
     rospy.init_node('relay_control_node')
     setup_gpio()
-    rospy.Subscriber('relay_states', str, relay_callback)
+    # Use the ROS String message type instead of the built-in str type
+    rospy.Subscriber('relay_states', String, relay_callback)
     rospy.loginfo("Relay node ready and listening...")
     try:
         rospy.spin()
