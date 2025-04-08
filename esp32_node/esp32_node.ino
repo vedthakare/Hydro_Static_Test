@@ -31,8 +31,21 @@ HX711 scale;
 adc_oneshot_unit_handle_t adc1_handle, adc2_handle;
 adc_cali_handle_t adc1_cali_handle = NULL, adc2_cali_handle = NULL;
 
+
+
+
+
 // Function to initialize ADC calibration
 bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle);
+
+
+// Format: {slope, intercept} for each sensor
+const float PT1_CALIBRATION[] = {0.9732, -0.0299};  // Example values - will calculate correct ones
+const float PT2_CALIBRATION[] = {0.9967, -0.0299};  // Example values
+const float TC1_CALIBRATION[] = {0.9950, -0.0142};  // Example values
+const float TC2_CALIBRATION[] = {0.9950, -0.0142};  // Example values
+
+
 
 
 void setup() {
@@ -127,10 +140,11 @@ void loop() {
     }
     
     // Convert to volts
-    pt1_v = voltage_pt1 / 1000.0;
-    pt2_v = voltage_pt2 / 1000.0;
-    tc1_v = voltage_tc1 / 1000.0;
-    tc2_v = voltage_tc2 / 1000.0;
+// Convert to volts with custom calibration
+    pt1_v = applyCustomCalibration(voltage_pt1 / 1000.0, PT1_CALIBRATION);
+    pt2_v = applyCustomCalibration(voltage_pt2 / 1000.0, PT2_CALIBRATION);
+    tc1_v = applyCustomCalibration(voltage_tc1 / 1000.0, TC1_CALIBRATION);
+    tc2_v = applyCustomCalibration(voltage_tc2 / 1000.0, TC2_CALIBRATION);
     
     // Get load cell reading with proper error handling
     if (scale.is_ready()) {
@@ -147,6 +161,11 @@ void loop() {
     
     delay(6); // Changed delay from 5ms to 100ms to reduce serial flooding
     }
+}
+
+float applyCustomCalibration(float measured_voltage, const float calibration[]) {
+  // Apply linear correction: actual = measured * slope + intercept
+  return measured_voltage * calibration[0] + calibration[1];
 }
 
 bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t *out_handle) {
