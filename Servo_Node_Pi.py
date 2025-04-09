@@ -42,9 +42,6 @@ def angle_callback(msg):
     rospy.loginfo("Received angle: {:.1f}° → Calculated duty cycle: {:.2f}%".format(angle, duty))
     # Update the PWM duty cycle accordingly.
     pwm.ChangeDutyCycle(duty)
-    # Allow time for the servo to move, then clear the signal to prevent jitter.
-    sleep(0.3)
-    pwm.ChangeDutyCycle(0)
 
 def main():
     global pwm
