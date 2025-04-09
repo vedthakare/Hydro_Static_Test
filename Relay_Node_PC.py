@@ -56,7 +56,7 @@ class ControlGUI(QMainWindow):
     def toggle_relay(self, index, state):
         self.relay_states[index] = state
         self.relay_buttons[index].setText(f"Relay {index+1}: {'ON' if state else 'OFF'}")
-        relay_str = ','.join(['1' if s else '0' for s in self.relay_states])
+        relay_str = ','.join(['0' if s else '1' for s in self.relay_states])
         self.relay_pub.publish(f"{relay_str}")
 
     def create_emergency_section(self):
