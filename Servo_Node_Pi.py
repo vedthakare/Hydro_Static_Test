@@ -2,7 +2,6 @@
 import rospy
 from std_msgs.msg import Float32
 import RPi.GPIO as GPIO
-from time import sleep
 
 # Servo configuration
 SERVO_PIN = 12      # GPIO 12 (BCM numbering)
