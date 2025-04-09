@@ -85,10 +85,7 @@ class ControlGUI(QMainWindow):
 
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(0, 270)
-        # Update the label continuously but do not publish on each change.
-        self.slider.valueChanged.connect(self.update_servo_label)
-        # Publish only when the slider is released.
-        self.slider.sliderReleased.connect(self.publish_servo)
+        self.slider.valueChanged.connect(self.update_servo)
         layout.addWidget(QLabel("Servo Angle (0°–270°)"))
         layout.addWidget(self.slider)
 
@@ -99,12 +96,10 @@ class ControlGUI(QMainWindow):
         group.setLayout(layout)
         self.main_layout.addWidget(group)
 
-    def update_servo_label(self, value):
+    def update_servo(self, value):
         self.servo_angle = value
         self.servo_label.setText(f"Current Position: {value}°")
-
-    def publish_servo(self):
-        self.servo_pub.publish(self.servo_angle)
+        self.servo_pub.publish(value)
 
     def apply_styles(self):
         palette = QPalette()
