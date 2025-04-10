@@ -40,11 +40,15 @@ bool adc_calibration_init(adc_unit_t unit, adc_atten_t atten, adc_cali_handle_t 
 
 
 // Format: {slope, intercept} for each sensor
-const float PT1_CALIBRATION[] = {0.9732, -0.0299};  // Example values - will calculate correct ones
-const float PT2_CALIBRATION[] = {0.9967, -0.0299};  // Example values
-const float TC1_CALIBRATION[] = {0.9950, -0.0142};  // Example values
-const float TC2_CALIBRATION[] = {0.9950, -0.0142};  // Example values
+//const float PT1_CALIBRATION[] = {0.9732, -0.0299};  // Example values - will calculate correct ones
+//const float PT2_CALIBRATION[] = {0.9967, -0.0299};  // Example values
+//const float TC1_CALIBRATION[] = {0.9950, -0.0142};  // Example values
+//const float TC2_CALIBRATION[] = {0.9950, -0.0142};  // Example values
 
+const float PT1_CALIBRATION[] = {0.99843, -0.02436};  // Example values - will calculate correct ones
+const float PT2_CALIBRATION[] = {0.99948, -0.02513};  // Example values
+const float TC1_CALIBRATION[] = {1.00442, -0.01333};  // Example values
+const float TC2_CALIBRATION[] = {1.00442, -0.01333};  // Example values
 
 
 
