@@ -38,8 +38,8 @@ def pressure_conversion(voltage):
     Convert voltage to pressure in PSI using sensor-specific formula:
     P = ((V_out - 0.1 * V_supply) * (P_max - P_min)) / (0.8 * V_supply)
     """
-    V_out = voltage
-    V_supply = (3 + 1/3) * 1000  # mV, assuming 3.33 V supply
+    V_out = voltage * 5 / 3.33
+    V_supply = 5 # mV, assuming 3.33 V supply
     P_max = 667  # max pressure in PSI
     P_min = 0    # min pressure
 
@@ -52,7 +52,7 @@ def thermocouple_conversion(voltage):
     Convert thermocouple voltage (V_o) to temperature (Celsius)
     Formula derived from a linear approximation.
     """
-    V_o = voltage
+    V_o = voltage * 5 / 3.33
     T = (V_o - 1.25) / (5e-3)  # assuming 5 mV/°C sensitivity
     return T
 
