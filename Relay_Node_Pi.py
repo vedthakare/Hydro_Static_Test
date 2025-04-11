@@ -13,7 +13,7 @@ def setup_gpio():
     GPIO.setmode(GPIO.BCM)  # Use BCM numbering
     for pin in RELAY_PINS:
         GPIO.setup(pin, GPIO.OUT)
-        GPIO.output(pin, GPIO.LOW)  # Start all relays OFF
+        GPIO.output(pin, GPIO.HIGH)  # Start all relays OFF
 
 def emergency_stop_callback(data):
     global emergency_active
@@ -40,7 +40,7 @@ def relay_callback(data):
         if len(states) != 4:
             rospy.logwarn("Expected 4 values, got: %s", data.data)
             return
-        # Set each relay ON (HIGH) or OFF (LOW)
+        # Set each relay ON (Low) or OFF (High)
         for i in range(4):
             GPIO.output(RELAY_PINS[i], GPIO.HIGH if states[i] else GPIO.LOW)
         rospy.loginfo("Relays set to: %s", states)
