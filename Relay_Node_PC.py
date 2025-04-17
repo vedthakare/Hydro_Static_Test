@@ -18,11 +18,16 @@ class ControlGUI(QMainWindow):
 
         self.relay_states = [False]*4
         self.emergency_stop = False
-        self.servo_angle = 100
-        self.servo_angle_2 = 0
+        self.servo_angle = 100  # Starting at max value (closed position)
+        self.servo_angle_2 = 95  # Changed from 0 to 95 (max value/closed position)
 
         self.init_ros()
         self.create_ui()
+        
+        # Publish initial servo positions
+        self.servo_pub.publish(Float32(self.servo_angle))
+        self.servo2_pub.publish(Float32(self.servo_angle_2))
+        
         self.apply_styles()
         self.statusBar().showMessage("ROS Publishing Mode")
 
@@ -98,6 +103,7 @@ class ControlGUI(QMainWindow):
         # Create slider for first servo
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(20, 100)
+        self.slider.setValue(self.servo_angle)  # Set initial value
         self.slider.valueChanged.connect(self.update_servo)
         slider1_layout.addWidget(self.slider, 4)  # Give slider more space
         
@@ -127,6 +133,7 @@ class ControlGUI(QMainWindow):
         # Create slider for second servo
         self.slider2 = QSlider(Qt.Horizontal)
         self.slider2.setRange(15, 95)
+        self.slider2.setValue(self.servo_angle_2)  # Set initial value
         self.slider2.valueChanged.connect(self.update_servo2)
         slider2_layout.addWidget(self.slider2, 4)  # Give slider more space
         
