@@ -19,6 +19,7 @@ class ControlGUI(QMainWindow):
         self.relay_states = [False]*4
         self.emergency_stop = False
         self.servo_angle = 0
+        self.servo_angle_2 = 0
 
         self.init_ros()
         self.create_ui()
@@ -29,7 +30,8 @@ class ControlGUI(QMainWindow):
         rospy.init_node("control_gui_node", anonymous=True)
         self.relay_pub = rospy.Publisher("/relay_states", String, queue_size=10)
         self.estop_pub = rospy.Publisher("/emergency_stop", Bool, queue_size=10)
-        self.servo_pub = rospy.Publisher("/servo_angle", Float32, queue_size=10)
+        self.servo_pub = rospy.Publisher("/servo_angle", Float32, queue_size=3)
+        self.servo2_pub= rospy.Publisher("/servo_angle_2", Float32, queue_size=3)
 
     def create_ui(self):
         self.create_relay_section()
@@ -80,26 +82,109 @@ class ControlGUI(QMainWindow):
         self.estop_status.setText("Kill Switch: ACTIVATED")
 
     def create_servo_section(self):
-        group = QGroupBox("Servo")
-        layout = QVBoxLayout()
-
+        group = QGroupBox("Servo Controls")
+        main_layout = QVBoxLayout()
+        
+        # Create a horizontal layout for the two servo controls
+        servo_layout = QHBoxLayout()
+        
+        # First Servo Control
+        first_servo_layout = QVBoxLayout()
+        first_servo_layout.addWidget(QLabel("Servo 1 Angle (0°–270°)"))
+        
+        # Add a horizontal layout for slider and text input
+        slider1_layout = QHBoxLayout()
+        
+        # Create slider for first servo
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setRange(0, 270)
         self.slider.valueChanged.connect(self.update_servo)
-        layout.addWidget(QLabel("Servo Angle (0°–270°)"))
-        layout.addWidget(self.slider)
-
+        slider1_layout.addWidget(self.slider, 4)  # Give slider more space
+        
+        # Create text input for first servo
+        self.servo_input = QLineEdit()
+        self.servo_input.setMaximumWidth(60)
+        self.servo_input.setText("0")
+        self.servo_input.returnPressed.connect(self.update_servo_from_text)
+        slider1_layout.addWidget(self.servo_input, 1)  # Give input box less space
+        
+        first_servo_layout.addLayout(slider1_layout)
+        
         self.servo_label = QLabel("Current Position: 0°")
         self.servo_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.servo_label)
-
-        group.setLayout(layout)
+        first_servo_layout.addWidget(self.servo_label)
+        
+        # Add first servo layout to the horizontal layout
+        servo_layout.addLayout(first_servo_layout)
+        
+        # Second Servo Control
+        second_servo_layout = QVBoxLayout()
+        second_servo_layout.addWidget(QLabel("Servo 2 Angle (0°–270°)"))
+        
+        # Add a horizontal layout for slider and text input
+        slider2_layout = QHBoxLayout()
+        
+        # Create slider for second servo
+        self.slider2 = QSlider(Qt.Horizontal)
+        self.slider2.setRange(0, 270)
+        self.slider2.valueChanged.connect(self.update_servo2)
+        slider2_layout.addWidget(self.slider2, 4)  # Give slider more space
+        
+        # Create text input for second servo
+        self.servo2_input = QLineEdit()
+        self.servo2_input.setMaximumWidth(60)
+        self.servo2_input.setText("0")
+        self.servo2_input.returnPressed.connect(self.update_servo2_from_text)
+        slider2_layout.addWidget(self.servo2_input, 1)  # Give input box less space
+        
+        second_servo_layout.addLayout(slider2_layout)
+        
+        self.servo2_label = QLabel("Current Position: 0°")
+        self.servo2_label.setAlignment(Qt.AlignCenter)
+        second_servo_layout.addWidget(self.servo2_label)
+        
+        # Add second servo layout to the horizontal layout
+        servo_layout.addLayout(second_servo_layout)
+        
+        # Add the horizontal layout to the main layout
+        main_layout.addLayout(servo_layout)
+        
+        group.setLayout(main_layout)
         self.main_layout.addWidget(group)
 
     def update_servo(self, value):
         self.servo_angle = value
         self.servo_label.setText(f"Current Position: {value}°")
-        self.servo_pub.publish(value)
+        self.servo_input.setText(str(value))
+        self.servo_pub.publish(Float32(value))
+
+    def update_servo_from_text(self):
+        try:
+            value = int(self.servo_input.text())
+            # Ensure value is within valid range
+            value = max(0, min(270, value))
+            self.slider.setValue(value)
+            # The slider's valueChanged signal will trigger update_servo
+        except ValueError:
+            # Reset to current value if input is invalid
+            self.servo_input.setText(str(self.servo_angle))
+
+    def update_servo2(self, value):
+        self.servo_angle_2 = value
+        self.servo2_label.setText(f"Current Position: {value}°")
+        self.servo2_input.setText(str(value))
+        self.servo2_pub.publish(Float32(value))
+
+    def update_servo2_from_text(self):
+        try:
+            value = int(self.servo2_input.text())
+            # Ensure value is within valid range
+            value = max(0, min(270, value))
+            self.slider2.setValue(value)
+            # The slider's valueChanged signal will trigger update_servo2
+        except ValueError:
+            # Reset to current value if input is invalid
+            self.servo2_input.setText(str(self.servo_angle_2))
 
     def apply_styles(self):
         palette = QPalette()
