@@ -4,7 +4,7 @@ from std_msgs.msg import Float32
 import RPi.GPIO as GPIO
 
 # Servo configuration
-SERVO_PINS = [12, 16]     # GPIO 12 and 13 (BCM numbering)
+SERVO_PINS = [12, 16]     # GPIO 12 and 6 (BCM numbering)
 FREQ = 80
 
 SERVO_MIN_ANGLE = 0
