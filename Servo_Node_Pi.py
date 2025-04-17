@@ -4,11 +4,11 @@ from std_msgs.msg import Float32
 import RPi.GPIO as GPIO
 
 # Servo configuration
-SERVO_PINS = [12, 13]     # GPIO 12 and 13 (BCM numbering)
+SERVO_PINS = [12, 16]     # GPIO 12 and 13 (BCM numbering)
 FREQ = 80
 
 SERVO_MIN_ANGLE = 0
-SERVO_MAX_ANGLE = 270
+SERVO_MAX_ANGLE = 180
 PULSE_MIN_MS = 0.5
 PULSE_MAX_MS = 2.0
 PWM_PERIOD_MS = 1000.0 / FREQ
