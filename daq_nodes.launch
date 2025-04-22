@@ -1,0 +1,11 @@
+<launch>
+    <!-- Launch nodes from the 'hot_fire' package -->
+
+    <node name="Relays" pkg="hot_fire" type="relay_node_pi.py" output="screen" />
+    <node name="Servos" pkg="hot_fire" type="two_servos.py" output="screen" />
+
+    <!-- Launch ESP32 related nodes package -->
+    <node name="Data" pkg="esp" type="data_read.py" output="screen" />
+    <node name="ESP32" pkg="esp_enable" type="enable.py" output="screen" />
+
+</launch>

@@ -49,22 +49,50 @@ class ControlGUI(QMainWindow):
         layout = QGridLayout()
 
         self.relay_buttons = []
-        for i in range(4):
-            button = QPushButton(f"Relay {i+1}: OFF")
-            button.setCheckable(True)
-            button.toggled.connect(lambda checked, idx=i: self.toggle_relay(idx, checked))
-            self.relay_buttons.append(button)
-            layout.addWidget(QLabel(f"Relay {i+1}:"), i, 0)
-            layout.addWidget(button, i, 1)
+        self.relay_states = [False, False, False, False]  # Four relays
+
+        # Relay 1
+        button1 = QPushButton("Relay 1: OFF")
+        button1.setCheckable(True)
+        button1.toggled.connect(lambda checked: self.toggle_relay(0, checked))
+        self.relay_buttons.append(button1)
+        layout.addWidget(QLabel("Relay 1:"), 0, 0)
+        layout.addWidget(button1, 0, 1)
+
+        # Relay 2
+        button2 = QPushButton("Relay 2: OFF")
+        button2.setCheckable(True)
+        button2.toggled.connect(lambda checked: self.toggle_relay(1, checked))
+        self.relay_buttons.append(button2)
+        layout.addWidget(QLabel("Relay 2:"), 1, 0)
+        layout.addWidget(button2, 1, 1)
+
+        # Relay 3
+        button3 = QPushButton("Relay 3: OFF")
+        button3.setCheckable(True)
+        button3.toggled.connect(lambda checked: self.toggle_relay(2, checked))
+        self.relay_buttons.append(button3)
+        layout.addWidget(QLabel("Relay 3:"), 2, 0)
+        layout.addWidget(button3, 2, 1)
+
+        # Relay 4
+        button4 = QPushButton("Ignition: OFF")
+        button4.setCheckable(True)
+        button4.toggled.connect(lambda checked: self.toggle_relay(3, checked))
+        self.relay_buttons.append(button4)
+        layout.addWidget(QLabel("Ignition:"), 3, 0)
+        layout.addWidget(button4, 3, 1)
 
         group.setLayout(layout)
         self.main_layout.addWidget(group)
 
+
     def toggle_relay(self, index, state):
         self.relay_states[index] = state
-        self.relay_buttons[index].setText(f"Relay {index+1}: {'ON' if state else 'OFF'}")
+        self.relay_buttons[index].setText(f"{self.relay_buttons[index].text().split(':')[0]}: {'ON' if state else 'OFF'}")
         relay_str = ','.join(['0' if s else '1' for s in self.relay_states])
-        self.relay_pub.publish(f"{relay_str}")
+        self.relay_pub.publish(relay_str)
+
 
     def create_emergency_section(self):
         group = QGroupBox("Emergency Stop")
@@ -85,6 +113,8 @@ class ControlGUI(QMainWindow):
         self.emergency_stop = True
         self.estop_pub.publish(True)
         self.estop_status.setText("Kill Switch: ACTIVATED")
+        self.servo_pub.publish(Float32(100))
+        self.servo2_pub.publish(Float32(95))
 
     def create_servo_section(self):
         group = QGroupBox("Servo Controls")
