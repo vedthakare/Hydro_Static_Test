@@ -64,6 +64,9 @@ class ServoController:
 	def __init__(self):
 		GPIO.setmode(GPIO.BCM)
 		self.servos = [SingleServo(pin) for pin in SERVO_PINS]
+		# Servo 1: 100°, Servo 2: 95°
+		self.servos[0].set_target_angle(100)
+		self.servos[1].set_target_angle(95)
 
 	def angle_callback_1(self, msg):
 		self.servos[0].set_target_angle(msg.data)
