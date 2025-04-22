@@ -1,0 +1,12 @@
+<launch>
+    <arg name="bag_filename" default="$(env HOME)/bags/hotfire_default.bag"/>
+
+    <node name="rosbag_record" pkg="rosbag" type="record" output="screen"
+          args="-O $(arg bag_filename) /pt1_v /pt1_value /pt2_v /tc1_v /tc2_v /loadcell /loadcell_value /relay_states /servo_angle /servo_angle_2" />
+</launch>
+
+
+<!-- 
+USAGE:
+roslaunch hot_fire data_record.launch bag_filename:=/bags/hotfire_apr22_1530.bag 
+-->
